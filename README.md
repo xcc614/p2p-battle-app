@@ -229,3 +229,5 @@ git push -u origin main
 | [android-overlay\README.md](<C:\Workspace\Marvis\p2p-battle-app\android-overlay\README.md>) | 原生侧源码职责、注入规则、协议对照、实现踩坑、构建后自测清单 |
 | [.github\workflows\build-apk.yml](<C:\Workspace\Marvis\p2p-battle-app\.github\workflows\build-apk.yml>) | 云构建流水线（可直接阅读注释了解每一步） |
 | `C:\Workspace\Marvis\p2p-battle` | 游戏本体工程（前端源码与 `server_local.py` 参考实现） |
+
+
