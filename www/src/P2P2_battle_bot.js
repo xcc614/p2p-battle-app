@@ -22,7 +22,7 @@ const _AI_FALLBACK_LEVELS = [
 ];
 
 const BotAI = {
-  // ---- 难度参数表：读 config/ai.json（config_loader.js 已挂为全局 BOT_LEVELS）----
+  // ---- 难度参数表：读 config/ai.json（P2P2_config_loader.js 已挂为全局 BOT_LEVELS）----
   // 兼容两种写法：{ defaultLevel, levels: [...] }（可带默认档位）或纯数组 [...]（当前配置形态）
   // 档位数量 = 表长度：数组增删一档，AI 表现与界面下拉档位都自动跟随，无需改代码
   // noise    瞄准角噪声(rad)，越大越歪
@@ -108,7 +108,10 @@ const BotAI = {
         this._think(bot, world);
       }
       // 应用移动
-      const mv = bot._mv || { x: 0, y: 0 };
+      // 需求1/4：AI（含 Boss）同样受施法锁定约束——蓄力 / 禁咒 / 吟唱期间按配置禁止移动
+      const botLocked = (typeof CastSystem !== 'undefined' && CastSystem.locksMove)
+        ? CastSystem.locksMove(bot.id) : false;
+      const mv = botLocked ? { x: 0, y: 0 } : (bot._mv || { x: 0, y: 0 });
       const vl = Math.hypot(mv.x, mv.y);
       if (vl > 0.01) {
         const P = this._P(bot.aiLevel);

@@ -1,4 +1,4 @@
-# android-overlay — 安卓原生侧注入包
+﻿# android-overlay — 安卓原生侧注入包
 
 本目录是「P2P 弹幕对战」打包安卓 APP 所需的**全部原生侧源码**。构建脚本（GitHub Actions 内执行）
 在 `npx cap add android && npx cap sync android` 生成 Gradle 工程后，把这里的文件注入进去，再 `assembleDebug` 出包。
@@ -141,7 +141,7 @@ android {
 
 ### 前端配合要点（已在前一阶段完成）
 
-- `src/net.js` 已注入 `resolveSignalBase()`，**优先 `location.origin`**：WebView 内页面 origin 即 `http://127.0.0.1:<port>`（默认 8080），
+- `src/P2P2_net_transport.js` 已注入 `resolveSignalBase()`，**优先 `location.origin`**：WebView 内页面 origin 即 `http://127.0.0.1:<port>`（默认 8080），
   扫码进入的成员页 origin 即 `http://<热点IP>:8080`，双方自动连到同一台手机的服务，无需手填地址。
 - `config/runtime.json` 的 `SIGNAL_BASE` 已降级为 `http://127.0.0.1:8080`，仅作兜底。
 - `www/landing/` 的扫码地址解析优先级：`?lan=` 查询参数（原生注入，最优先）→ `window.__LAN_BASE__` → 当前访问 origin → `/api/info`（或 `/lan-info.json`）探测；

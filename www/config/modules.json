@@ -1,6 +1,6 @@
 {
-  "_doc": "模块注册表（设计文档《原子属性与模块化配置设计_v1》第八章）：定义玩家可挂载的模块类型与槽位上限 maxSlots。source 指向条目来源库——equipment=config/equipment.json，mods=config/mods.json，skills=config/skills.json，custom=本文件 entries 内联条目。候选范围不再用白名单：候选池由「条目库全部条目按 group 标签与模块 groups 声明实时解析」得出——条目的 group 命中本模块 groups[].id 即进入该分组候选；group 为空 / 未知 / 不被任何模块声明时归入候选池底部「未分组」折叠区，不丢弃；被 excludeGroups 列出的分组（如 Boss 技能的 enemy 组）不进本模块候选池。allowDuplicate=true 允许同一模块内重复选同一条目。玩家档案（config/profiles.json）只记录模块 id 与条目 id，真实数值与技能由 src/combat.js + src/profiles.js 按本表解析叠加——新增模块/条目零代码改动。",
-  "_groups_doc": "分组/部位结构（v2）：模块下用 groups 声明若干分组，每组 { id, name, maxSlots, allowDuplicate?, notes? }。语义：① id 与条目库条目的 group 标签对齐（装备兼容旧 slot 标签），条目归属哪个分组由「条目.group → 条目.slot」解析；② 每组 maxSlots 是该组独立槽位上限，Σ组上限 = 该模块可配置的总格子数（应 ≤ 模块 maxSlots）；③ 组内候选范围 = 来源库中 group 等于本组 id 的条目（无需再写 pool 白名单）；④ 未声明的分组标签不丢弃：候选池底部「未分组」折叠区收纳全部未归属条目，可正常拖拽装载；⑤ excludeGroups 列出的分组（按 group id）整体不进本模块候选池，供「示例/Boss 专用」条目隔离；⑥ 组级 allowDuplicate 覆盖模块级（缺省继承模块 allowDuplicate）。引擎只做组上限截断，新增分组/条目零代码改动；relic 未声明 groups，保持单池行为（全部条目共用一个池，上限 maxSlots）。",
+  "_doc": "模块注册表（设计文档《原子属性与模块化配置设计_v1》第八章）：定义玩家可挂载的模块类型与槽位上限 maxSlots。source 指向条目来源库——equipment=config/equipment.json，mods=config/mods.json，skills=config/skills.json，custom=本文件 entries 内联条目。候选范围不再用白名单：候选池由「条目库全部条目按 group 标签与模块 groups 声明实时解析」得出——条目的 group 命中本模块 groups[].id 即进入该分组候选；group 为空 / 未知 / 不被任何模块声明时归入候选池底部「未分组」折叠区，不丢弃；被 excludeGroups 列出的分组（如 Boss 技能的 enemy 组）不进本模块候选池。allowDuplicate=true 允许同一模块内重复选同一条目。玩家档案（config/profiles.json）只记录模块 id 与条目 id，真实数值与技能由 src/P2P2_core_combat.js + src/P2P2_core_profiles.js 按本表解析叠加——新增模块/条目零代码改动。 本轮更新：skill 模块由「6 个类型分组（组上限之和 8）」改为「未声明分组 = 单一候选池」，上限取模块 maxSlots=8——技能不再按类型分桶，8 格任意装载；技能条目的 group 标签（skill_basic/skill_shot/skill_element/skill_melee/skill_field/skill_ultimate）仅作语义标注，不再约束候选与槽位（未被任何模块声明的标签按「未分组」处理）。",
+  "_groups_doc": "分组/部位结构（v2）：模块下用 groups 声明若干分组，每组 { id, name, maxSlots, allowDuplicate?, notes? }。语义：① id 与条目库条目的 group 标签对齐（装备兼容旧 slot 标签），条目归属哪个分组由「条目.group → 条目.slot」解析；② 每组 maxSlots 是该组独立槽位上限，Σ组上限 = 该模块可配置的总格子数（应 ≤ 模块 maxSlots）；③ 组内候选范围 = 来源库中 group 等于本组 id 的条目（无需再写 pool 白名单）；④ 未声明的分组标签不丢弃：候选池底部「未分组」折叠区收纳全部未归属条目，可正常拖拽装载；⑤ excludeGroups 列出的分组（按 group id）整体不进本模块候选池，供「示例/Boss 专用」条目隔离；⑥ 组级 allowDuplicate 覆盖模块级（缺省继承模块 allowDuplicate）。引擎只做组上限截断，新增分组/条目零代码改动；relic 未声明 groups，保持单池行为（全部条目共用一个池，上限 maxSlots）。 示例：skill 模块本轮改为不声明 groups（单池，上限 maxSlots=8），即「技能不再区分类型，8 格只要有空位就能装任意技能」；模块定义面板会显示「当前未声明分组：本模块全部候选共用一个池」。",
   "equipment": {
     "name": "装备",
     "maxSlots": 8,
@@ -126,30 +126,8 @@
     "maxSlots": 8,
     "source": "skills",
     "allowDuplicate": false,
-    "notes": "条目的 id 即技能 id，直接进候选技能池（是否出战仍由 loadout 决定）。分组槽位之和 = 8，即最多带 8 个技能。候选按条目 group 标签与下列分组实时对齐；group=enemy 的 Boss 技能由 excludeGroups 排除，不进玩家候选池。",
-    "groups": [
-      {
-        "id": "skill_basic",
-        "name": "基础",
-        "maxSlots": 2,
-        "notes": "普攻 + 二选一（普攻 auto_attack 自动出战，建议始终留 1 格）"
-      },
-      {
-        "id": "skill_shot",
-        "name": "射击系",
-        "maxSlots": 2
-      },
-      {
-        "id": "skill_element",
-        "name": "元素系",
-        "maxSlots": 2
-      },
-      {
-        "id": "skill_ultimate",
-        "name": "终极技",
-        "maxSlots": 2
-      }
-    ],
+    "notes": "条目的 id 即技能 id，直接进候选技能池（是否出战仍由 loadout 决定）。skill 模块不区分技能类型：全部候选共用一个池，最多选 8 个技能（maxSlots=8），只要有空格就能装任意技能（基础/射击/元素/近战/领域/终极 均可混装）。候选按条目 group 标签与下列分组实时对齐；group=enemy 的 Boss 技能由 excludeGroups 排除，不进玩家候选池。",
+    "groups": [],
     "excludeGroups": [
       "enemy"
     ]

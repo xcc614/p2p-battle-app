@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>信令服务检测 · HTTP / 信令接口 / WebSocket</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#252a34;--txt:#e6e9ef;--dim:#9aa4b2;--ok:#31c48d;--bad:#f05252;--warn:#e3a008;--acc:#4c8dff}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:var(--bg);color:var(--txt);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+  h1{font-size:17px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:14px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  label{color:var(--dim);font-size:12px}
+  input{background:#0c0e12;border:1px solid var(--line);color:var(--txt);padding:7px 10px;border-radius:7px;font:13px ui-monospace,Consolas,monospace;min-width:200px}
+  button{background:var(--acc);border:0;color:#fff;padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer}
+  button.ghost{background:#222833;color:var(--txt)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .env{margin:12px 0;padding:9px 12px;border-radius:8px;background:#141821;border:1px solid var(--line);color:var(--dim);font-size:12px}
+  .case{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:9px;padding:11px 13px;margin-bottom:9px}
+  .case.ok{border-left-color:var(--ok)}
+  .case.bad{border-left-color:var(--bad)}
+  .case.warn{border-left-color:var(--warn)}
+  .case .h{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}
+  .badge{font-size:11px;padding:1px 7px;border-radius:20px;background:#222833;color:var(--dim);font-weight:500}
+  .case.ok .badge{background:rgba(49,196,141,.15);color:var(--ok)}
+  .case.bad .badge{background:rgba(240,82,82,.15);color:var(--bad)}
+  .case.warn .badge{background:rgba(227,160,8,.15);color:var(--warn)}
+  .case .d{color:var(--dim);font-size:12.5px;margin-top:5px;white-space:pre-wrap;word-break:break-all}
+  pre.raw{margin:7px 0 0;padding:8px 10px;background:#0c0e12;border:1px solid var(--line);border-radius:6px;color:#93a1b5;font:11.5px/1.5 ui-monospace,Consolas,monospace;overflow:auto;max-height:190px;white-space:pre-wrap;word-break:break-all}
+  #summary{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;margin:14px 0;font-size:13.5px;display:none}
+  #summary b{font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--dim)}
+  th{color:var(--txt);font-weight:600}
+  .note{color:var(--dim);font-size:12px;margin-top:16px;line-height:1.9}
+  code{background:#0c0e12;padding:1px 5px;border-radius:4px;font:12px ui-monospace,Consolas,monospace;color:#9db8e8}
+</style>
+</head>
+<body>
+<h1>p2p-battle 信令服务检测（Java HTTP + 信令接口 + WebSocket）</h1>
+<div class="sub">独立检测页，与游戏前端 HTML 无关。检测对象：APK 内置信令服务（NanoHTTPD + NanoWSD）。</div>
+
+<div class="bar">
+  <label>服务地址</label>
+  <input id="host" value="192.168.1.92:8080" spellcheck="false">
+  <button id="run">开始检测</button>
+  <button id="member" class="ghost" disabled>追加成员端（验证信令广播）</button>
+  <button id="reset" class="ghost">清空</button>
+</div>
+
+<div class="env" id="env"></div>
+<div id="summary"></div>
+<div id="log"></div>
+
+<div class="note">
+  <b>判定口径</b><br>
+  ① <code>GET /health</code> 返回 <code>{"ok":true}</code> → 服务进程与 HTTP 层存活<br>
+  ② <code>POST /create</code> 返回 token → 信令房间/令牌接口可用<br>
+  ③ <code>/ws</code> 升级成功并收到 <code>{"type":"joined"}</code> → WebSocket 与信令会话正常<br>
+  ④ 成员端接入后房主端收到 <code>members</code> 广播 → 信令转发真的在工作<br><br>
+  <b>两点说明</b><br>
+  · 跨源 POST 已使用 <code>Content-Type: text/plain</code> 规避浏览器 OPTIONS 预检，服务端按 Content-Length 读取正文，解析不受影响。<br>
+  · 服务端存在约 5 秒空闲读超时（NanoWSD SO_TIMEOUT），静默连接可能被服务端主动关闭；<b>只要握手成功且拿到 joined 帧，即判定 WebSocket 与信令正常</b>，之后被关闭属空闲策略而非故障。
+</div>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var LOG = $('#log');
+  var state = { host: '', token: null, hostWs: null, hostFrames: [], checks: [] };
+
+  var qs = new URLSearchParams(location.search);
+  if (qs.get('host')) $('#host').value = qs.get('host');
+
+  $('#env').textContent = '当前页面运行环境：' + (location.protocol === 'file:' ? 'file:// （本地文件）' : location.protocol + '//' + location.host)
+    + ' ｜ origin=' + (location.origin || 'null') + ' ｜ 时间 ' + new Date().toLocaleString();
+
+  function addCase(title) {
+    var d = document.createElement('div');
+    d.className = 'case';
+    d.innerHTML = '<div class="h"><span class="badge">检测中</span><b></b></div><div class="d"></div><pre class="raw" style="display:none"></pre>';
+    d.querySelector('b').textContent = title;
+    LOG.appendChild(d);
+    var api = {
+      dom: d,
+      _set: function (cls, badge, detail, raw) {
+        d.className = 'case ' + cls;
+        d.querySelector('.badge').textContent = badge;
+        d.querySelector('.d').textContent = detail || '';
+        var p = d.querySelector('pre.raw');
+        if (raw) { p.style.display = 'block'; p.textContent = raw; }
+      },
+      ok: function (detail, raw) { api._set('ok', '通过', detail, raw); state.checks.push(['ok', title, detail]); },
+      bad: function (detail, raw) { api._set('bad', '失败', detail, raw); state.checks.push(['bad', title, detail]); },
+      warn: function (detail, raw) { api._set('warn', '注意', detail, raw); state.checks.push(['warn', title, detail]); }
+    };
+    return api;
+  }
+
+  function base() { return 'http://' + state.host; }
+
+  function ms(t0) { return Math.round(performance.now() - t0) + ' ms'; }
+
+  // ---------- WebSocket 探测：返回记录对象 ----------
+  function probeWs(token, type, budget) {
+    return new Promise(function (resolve) {
+      var myId = 'u' + Math.random().toString(36).slice(2, 8);
+      var url = 'ws://' + state.host + '/ws?token=' + encodeURIComponent(token) +
+        '&myId=' + myId + '&type=' + type + '&name=probe-' + type + '&roleId=hero';
+      var rec = { url: url, myId: myId, opened: false, openMs: 0, frames: [], error: null, closed: null, joined: null, joinedMs: 0 };
+      var t0 = performance.now();
+      var ws;
+      try { ws = new WebSocket(url); } catch (e) { rec.error = 'WebSocket 构造失败：' + e.message; resolve(rec); return; }
+      rec.ws = ws;
+      var timer = setTimeout(function () { try { ws.close(); } catch (e) {} resolve(rec); }, budget || 8000);
+
+      ws.onopen = function () { rec.opened = true; rec.openMs = performance.now() - t0; };
+      ws.onmessage = function (ev) {
+        rec.frames.push(ev.data);
+        if (!rec.joined && /"joined"/.test(String(ev.data))) {
+          rec.joined = String(ev.data);
+          rec.joinedMs = performance.now() - t0;
+          clearTimeout(timer);
+          setTimeout(function () { resolve(rec); }, 500);
+        }
+      };
+      ws.onerror = function () { rec.error = 'WebSocket error 事件（握手被拒或网络不可达）'; };
+      ws.onclose = function (ev) {
+        rec.closed = { code: ev.code, reason: ev.reason || '', ms: Math.round(performance.now() - t0) };
+        clearTimeout(timer);
+        resolve(rec);
+      };
+    });
+  }
+
+  function firstJson(text) {
+    try { return JSON.parse(text); } catch (e) { return null; }
+  }
+
+  function summarize() {
+    var bad = state.checks.filter(function (c) { return c[0] === 'bad'; });
+    var warn = state.checks.filter(function (c) { return c[0] === 'warn'; });
+    var box = $('#summary');
+    box.style.display = 'block';
+    var lines = [];
+    if (!bad.length) {
+      lines.push('<b style="color:#31c48d">结论：HTTP 服务、信令接口、WebSocket 服务均正常</b>');
+      lines.push('APK 内置信令服务可用：可建房、可升级 WS、可完成信令会话注册。');
+    } else {
+      lines.push('<b style="color:#f05252">结论：存在 ' + bad.length + ' 项失败</b>');
+      bad.forEach(function (c) { lines.push('· ' + c[1] + '：' + c[2]); });
+    }
+    if (warn.length) lines.push('<span style="color:#e3a008">注意项 ' + warn.length + ' 条（见上方「注意」）</span>');
+    lines.push('<table><tr><th>检测项</th><th>结果</th></tr>' + state.checks.map(function (c) {
+      var color = c[0] === 'ok' ? '#31c48d' : (c[0] === 'bad' ? '#f05252' : '#e3a008');
+      var label = c[0] === 'ok' ? '通过' : (c[0] === 'bad' ? '失败' : '注意');
+      return '<tr><td>' + c[1] + '</td><td style="color:' + color + '">' + label + '</td></tr>';
+    }).join('') + '</table>');
+    box.innerHTML = lines.join('<br>');
+  }
+
+  // ---------- 主检测流程 ----------
+  async function run() {
+    LOG.innerHTML = '';
+    $('#summary').style.display = 'none';
+    $('#member').disabled = true;
+    state.checks = [];
+    state.token = null;
+    state.hostFrames = [];
+    state.host = $('#host').value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    $('#host').value = state.host;
+
+    // 1) HTTP 健康检查
+    var c1 = addCase('L1 · HTTP 服务存活（GET /health）');
+    try {
+      var t0 = performance.now();
+      var r = await fetch(base() + '/health', { cache: 'no-store' });
+      var body = await r.text();
+      if (r.ok && /"ok"\s*:\s*true/.test(body)) c1.ok('HTTP ' + r.status + '，' + ms(t0) + '，响应 ' + body.trim(), body);
+      else c1.bad('HTTP ' + r.status + '，响应 ' + body.trim(), body);
+    } catch (e) {
+      c1.bad('请求失败：' + e.message + '\n（服务未启动 / 端口未监听 / 不在同一网络 / 被防火墙拦截）', '');
+      summarize(); return;
+    }
+
+    // 2) 服务信息
+    var c2 = addCase('L1 · 服务信息与地址（GET /api/info）');
+    var infoBefore = null;
+    try {
+      var r2 = await fetch(base() + '/api/info', { cache: 'no-store' });
+      var txt2 = await r2.text();
+      infoBefore = firstJson(txt2);
+      if (r2.ok && infoBefore) {
+        var d2 = 'ip=' + infoBefore.ip + '  port=' + infoBefore.port + '  rooms=' + infoBefore.rooms + '  clients=' + infoBefore.clients + '  lanIps=' + JSON.stringify(infoBefore.lanIps || []);
+        if (infoBefore.ip === '127.0.0.1') c2.warn(d2 + '\n服务端未取到局域网 IP（手机可能没连 Wi-Fi/热点），服务本身正常但其他设备连不上。', txt2);
+        else c2.ok(d2, txt2);
+      } else c2.warn('HTTP ' + r2.status + '，响应 ' + txt2.trim(), txt2);
+    } catch (e) { c2.warn('请求失败：' + e.message, ''); }
+
+    // 3) 建房接口（text/plain 规避跨源预检）
+    var c3 = addCase('L2 · 信令建房接口（POST /create）');
+    try {
+      var t3 = performance.now();
+      var r3 = await fetch(base() + '/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ name: 'probe', token: null })
+      });
+      var txt3 = await r3.text();
+      var d3 = firstJson(txt3);
+      if (r3.ok && d3 && d3.ok && d3.token) {
+        state.token = d3.token;
+        c3.ok('HTTP ' + r3.status + '，' + ms(t3) + '，token=' + d3.token + '，myId=' + d3.myId, txt3);
+      } else {
+        c3.bad('HTTP ' + r3.status + '，响应 ' + txt3.trim() + '\n（405=路由只收 POST；409=房间码被占用）', txt3);
+        summarize(); return;
+      }
+    } catch (e) {
+      c3.bad('请求失败：' + e.message + '\n（跨源被拦或服务中断）', '');
+      summarize(); return;
+    }
+
+    // 4) WebSocket 升级 + joined 首帧
+    var c4 = addCase('L3 · WebSocket 升级与会话注册（GET /ws → joined）');
+    var rec = await probeWs(state.token, 'host', 8000);
+    state.hostWs = rec;
+    if (!rec.opened) {
+      c4.bad('握手未完成（' + (rec.error || '连接被关闭') + '）\n服务端地址：' + rec.url, JSON.stringify(rec.closed || {}));
+    } else if (rec.joined) {
+      var j = firstJson(rec.joined);
+      var detail = '握手成功（' + Math.round(rec.openMs) + ' ms）并收到 joined（' + Math.round(rec.joinedMs) + ' ms）';
+      if (j) detail += '\ntype=' + j.type + '  myId=' + (j.myId || '-') + '  members=' + JSON.stringify(j.members || j.count || []);
+      c4.ok(detail, rec.joined);
+    } else {
+      c4.bad('升级成功但未收到 joined 帧；已收到 ' + rec.frames.length + ' 帧', rec.frames.join('\n'));
+    }
+
+    // 5) 会话计数复查
+    var c5 = addCase('L3 · 服务端会话计数（GET /api/info 复查）');
+    try {
+      await new Promise(function (r) { setTimeout(r, 400); });
+      var r5 = await fetch(base() + '/api/info', { cache: 'no-store' });
+      var i5 = firstJson(await r5.text());
+      if (i5) {
+        var detail5 = 'rooms=' + i5.rooms + '  clients=' + i5.clients + '（连接前 rooms=' + (infoBefore ? infoBefore.rooms : '?') + ' clients=' + (infoBefore ? infoBefore.clients : '?') + '）';
+        if (infoBefore && i5.clients > infoBefore.clients) c5.ok(detail5 + '\n服务端已注册本 WS 会话，WebSocket 层确认可用。', '');
+        else c5.warn(detail5 + '\n计数未上升：可能是连接已被空闲超时关闭，或多实例统计口径差异。', '');
+      } else c5.warn('响应无法解析', '');
+    } catch (e) { c5.warn('请求失败：' + e.message, ''); }
+
+    // 6) 应用帧往返
+    var c6 = addCase('L3 · 应用帧收发（房主端发一帧，观察服务端回帧）');
+    try {
+      if (state.hostWs && state.hostWs.ws && state.hostWs.ws.readyState === 1) {
+        var before = state.hostWs.frames.length;
+        state.hostWs.ws.send(JSON.stringify({ t: 'probe', ts: Date.now() }));
+        await new Promise(function (r) { setTimeout(r, 1500); });
+        var after = state.hostWs.frames.slice(before);
+        if (after.length) c6.ok('发送成功，收到 ' + after.length + ' 帧服务端消息', after.join('\n'));
+        else c6.warn('发送成功，1.5 秒内无回帧（信令帧可能为单向广播，不必然是故障）', '');
+      } else {
+        c6.warn('WS 当前不是打开状态，跳过', '');
+      }
+    } catch (e) { c6.warn('发送异常：' + e.message, ''); }
+
+    $('#member').disabled = !(state.token && state.hostWs && state.hostWs.opened);
+    summarize();
+  }
+
+  // ---------- 追加成员端：验证 members 广播 ----------
+  async function addMember() {
+    if (!state.token || !state.hostWs) return;
+    var c = addCase('L3 · 成员端接入与 members 广播');
+    var before = state.hostWs.frames.length;
+    var rec = await probeWs(state.token, 'member', 8000);
+    if (!rec.opened) {
+      c.bad('成员端握手失败：' + (rec.error || '连接被关闭'), JSON.stringify(rec.closed || {}));
+      summarize(); return;
+    }
+    if (rec.joined) c.ok('成员端握手成功并收到 joined：' + String(rec.joined).slice(0, 200), rec.joined);
+    else c.warn('成员端握手成功但未收到 joined', rec.frames.join('\n'));
+
+    await new Promise(function (r) { setTimeout(r, 1200); });
+    var delta = state.hostWs.frames.slice(before);
+    var d2 = addCase('L3 · 房主端是否收到成员变动广播');
+    if (delta.length) d2.ok('房主端收到 ' + delta.length + ' 帧（含成员变动）：' + String(delta.join(' ')).slice(0, 300), delta.join('\n'));
+    else d2.warn('房主端未观察到新帧（成员端可能已被服务端空闲超时关闭，或广播延迟）', '');
+    summarize();
+  }
+
+  $('#run').addEventListener('click', function () { run(); });
+  $('#member').addEventListener('click', function () { addMember(); });
+  $('#reset').addEventListener('click', function () {
+    LOG.innerHTML = ''; $('#summary').style.display = 'none'; $('#member').disabled = true;
+    state.checks = []; state.token = null;
+  });
+  run();
+})();
+</script>
+</body>
+</html>

@@ -47,6 +47,35 @@
     "selectable": true,
     "aiRole": "fighter"
   },
+  "ranger": {
+    "_doc": "第 8 批需求⑤兜底：profiles.json 的 ranger_scout（游侠·斥候，unitId=\"ranger\"）此前指向 units.json 未定义的模板，加载时只能走缺省推导链（名称/属性/技能栏全取兜底值，档案配置形同虚设）。此处正式补齐：字段口径与其它单位完全一致，为玩家侧（非 Boss）远程单位；数值锚定与 hero 同一区间（damageMul ≈ 0.7），偏「高机动 + 高暴击、低血量」的斥候定位。selectable=false = 不出现在单位选角列表（仍可由档案 unitId 正常加载），避免改变现有选角界面。",
+    "name": "游侠",
+    "base": {
+      "hp": 1450,
+      "speed": 232,
+      "radius": 13,
+      "damageMul": 0.72,
+      "critChance": 0.06,
+      "critMul": 1.55
+    },
+    "skills": [
+      "auto_attack",
+      "quick_shot",
+      "triple_shot",
+      "pierce_shot",
+      "shuriken_fan"
+    ],
+    "equipment": [],
+    "color": "#7ee787",
+    "palette": [
+      "#7ee787",
+      "#b7f5c3",
+      "#4fbf6a"
+    ],
+    "isBoss": false,
+    "selectable": false,
+    "aiRole": "fighter"
+  },
   "demon_lord": {
     "name": "魔王",
     "base": {

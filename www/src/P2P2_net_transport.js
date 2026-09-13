@@ -48,6 +48,9 @@ class Net {
     // 信令服务器基址：优先取 location.origin（APP 内置服务同源托管），
     // 令牌 / URL 参数可显式覆盖（setSignalBase），配置值仅作离线兜底。
     this.signalBase = resolveSignalBase();
+    // 需求7：信令服务器同时充当 WebSocket 兜底通道 —— 房内成员 WebRTC 直连全部不可用时，
+    // 应用消息改走服务器 TCP 中转（relay），保证房间不至于“进得来但完全同步不了”。
+    this.wsFallback = GAME_CONFIG.SIGNAL_WS_FALLBACK !== false;
     this.onMembers = null;    // (members) => void
     this.onSignal = null;     // (fromId, payload) => void
     this.onData = null;       // (fromId, msg) => void
@@ -104,6 +107,22 @@ class Net {
     await this._waitJoined();
   }
 
+  // 需求7：房间码留空 → 不建房，直接连信令服务器 WebSocket 进房（type=auto）。
+  // 服务端自动匹配可用房间，没有可用房间则新建；返回服务端分配 / 匹配到的房间码。
+  async joinSignalAuto(name, roleId) {
+    this.token = null;
+    this.myId = this.genId();
+    this.selfName = name;
+    this.selfRole = roleId;
+    this.isHost = false;        // joined / members 到达后按服务端顺序校正（首位=房主）
+    this.isMulti = true;
+    this.manual = '';
+    this._joinedDone = false;   // 重置，避免复用连接实例时被旧 joined 结果短路
+    await this.connectWs('auto');
+    await this._waitJoined();
+    return this.token;
+  }
+
   // 等待服务端 joined 确认（返回服务端裁决后的角色；超时兜底返回当前值）
   _waitJoined() {
     return new Promise(resolve => {
@@ -119,7 +138,9 @@ class Net {
       // config 里允许填 http(s) 地址（本地 python 信令 / CF 域名），前端统一转 ws(s)；
       // 令牌加入时 this.signalBase 已指向令牌内的信令地址
       const base = this.signalBase.replace(/\/+$/, '').replace(/^http/i, 'ws');
-      const url = base + '/ws?token=' + this.token + '&myId=' + this.myId + '&type=' + type
+      // token 允许为空（type=auto：取消局域网勾选且房间码留空时直连服务器，
+      // 由服务端匹配可用房间 / 新建房间后再把房间码随 joined 回传）
+      const url = base + '/ws?token=' + encodeURIComponent(this.token || '') + '&myId=' + this.myId + '&type=' + type
         + '&name=' + encodeURIComponent(this.selfName || '')
         + '&roleId=' + encodeURIComponent(this.selfRole || 'hero');
       this.ws = new WebSocket(url);
@@ -138,6 +159,8 @@ class Net {
     if (m.type === 'joined') {
       // 服务端可能分配 myId；joined 携带服务端裁决后的角色（Boss 冲突会降级为勇者）
       if (m.myId) this.myId = m.myId;
+      // 需求7：type=auto 进房时服务端回传实际房间码（匹配到既有房 / 新建房），房主据此分享
+      if (m.token) this.token = m.token;
       if (m.roleId) this.selfRole = m.roleId;
       this._joinedDone = true;
       if (this._joinWaiter) this._joinWaiter(this.selfRole);
@@ -297,9 +320,24 @@ class Net {
   broadcast(msg) {
     this._stamp(msg);
     const s = JSON.stringify(msg);
+    let sent = 0;
     this.peers.forEach(e => {
-      if (e.dc && e.dc.readyState === 'open') e.dc.send(s);
+      if (e.dc && e.dc.readyState === 'open') { e.dc.send(s); sent++; }
     });
+    // 需求7：成员直连通道全部不可用时，改走信令服务器 WebSocket 兜底中转（relay），
+    // 避免“能进房但完全同步不了”；只要有一条直连投递成功就不兜底，防止消息重复
+    if (!sent && this.wsFallback && this.members.length > 1) this.relayViaWs(msg);
+    return sent;
+  }
+
+  // 需求7：WebSocket 兜底通道 —— 应用消息经信令服务器 TCP 中转（可靠有序）
+  relayViaWs(msg) {
+    if (this.manual) return false;   // 手动贴码房无服务器可兜底
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ action: 'relay', payload: msg }));
+      return true;
+    }
+    return false;
   }
 
   sendTo(id, msg) {

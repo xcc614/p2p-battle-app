@@ -20,7 +20,7 @@
 //   event 取值：'' | 'hit' | 'kill' | 'death' | 'respawn' | 'time'
 //   —— 事件型条件（onKill / onDeath / onRespawn）只在对应事件那一帧成立。
 //
-// 条件统一走 src/conditions.js（新增条件类型只需在那边加一条分支，本文件不改），
+// 条件统一走 src/P2P2_core_conditions.js（新增条件类型只需在那边加一条分支，本文件不改），
 // 计数与阶段计时由本模块负责：ctx 里注入 hits / hitTaken / combo / maxCombo / deaths / phaseTime，
 // 以及按单位暴露的运行时量 alive / aliveTime / respawnLeft / maxHp（见 _ctx）。
 
@@ -88,7 +88,7 @@ const Triggers = {
       if (t.once !== false && n > 0) continue;                              // once:true（默认）只触发一次
       if (t.times != null && n >= Math.max(1, t.times)) continue;           // 显式限定总次数
       // 条件链统一判定：新增条件（血量高于 / 受击达N次 / 命中达N次 / 连击达N次 /
-      // 阶段已过N秒 / 死亡瞬间 / 复活瞬间）与既有条件同走 src/conditions.js，均为纯数据可配
+      // 阶段已过N秒 / 死亡瞬间 / 复活瞬间）与既有条件同走 src/P2P2_core_conditions.js，均为纯数据可配
       const ok = Conditions.check({ type: t.when, value: t.value }, c);
       // 边沿采样：记录本条规则「上次采样时条件是否成立」，供 once:false 判断上升沿
       const wasOk = edge[id] === true;

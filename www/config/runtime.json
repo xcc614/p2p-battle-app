@@ -9,6 +9,79 @@
     "w": 1600,
     "h": 1000
   },
+  "FX": {
+    "mark": {
+      "life": 3.2,
+      "lead": 2.2,
+      "trackRate": 12,
+      "hold": 1.5,
+      "fillAlpha": 0.26,
+      "strokeAlpha": 1.0,
+      "width": 11,
+      "glowWidth": 22,
+      "glowAlpha": 0.42,
+      "doubleRing": true,
+      "pulse": true,
+      "pulseAmp": 0.2,
+      "fadeTail": 0.5,
+      "progress": true,
+      "cross": true
+    },
+    "landing": {
+      "fillAlpha": 0.26,
+      "strokeAlpha": 1.0,
+      "width": 11,
+      "glowWidth": 22,
+      "glowAlpha": 0.4,
+      "doubleRing": true,
+      "pulse": true,
+      "pulseAmp": 0.08,
+      "viewPad": 34,
+      "trackRate": 16,
+      "wallInset": 34,
+      "ring": true
+    },
+    "settle": {
+      "life": 1.2,
+      "grow": 1.18,
+      "width": 10,
+      "glowWidth": 20,
+      "glowAlpha": 0.35,
+      "fillAlpha": 0.28,
+      "strokeAlpha": 1.0,
+      "doubleRing": true
+    },
+    "throw": {
+      "dur": 0.85,
+      "peak": 150,
+      "stagger": 0.08,
+      "arm": true
+    },
+    "orbit": {
+      "radius": 70,
+      "spin": 4,
+      "life": 2,
+      "persist": true,
+      "keep": true,
+      "block": true,
+      "blocks": 1,
+      "refill": true,
+      "rehit": 0.6,
+      "consume": false,
+      "replace": true,
+      "maxPersist": 64
+    },
+    "aura": {
+      "radius": 120,
+      "duration": 3,
+      "tick": 0.5,
+      "damageMul": 1,
+      "follow": true,
+      "markFollow": true,
+      "markSnap": true,
+      "markTrackRate": 24
+    }
+  },
   "RENDER": {
     "mode": "webgl",
     "antialias": true,
@@ -17,6 +90,8 @@
   },
   "SIGNAL_BASE": "http://127.0.0.1:8080",
   "SIGNAL_MODE": "ws",
+  "SIGNAL_AUTO_JOIN": true,
+  "SIGNAL_WS_FALLBACK": true,
   "ICE_SERVERS": [
     {
       "urls": "stun:stun.cloudflare.com:3478"

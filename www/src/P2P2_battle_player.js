@@ -42,6 +42,7 @@ class Player {
     this._statsBaseNoCond = this.statsTotal;              // 条件重算基线（方案 C；血量比分母，防条件自激）
     this._condKey = null;                                 // 条件签名（Combat.statsKey）：不变则不重算
     this.buffs = [];                                      // 生效 buff（BuffSystem 管理，P2）
+    this.dots = [];                                       // 生效持续伤害（撕裂 DoT，BuffSystem 管理；本轮新增）
     this.x = 0; this.y = 0;
     this.dir = { x: 1, y: 0 };
     this.hp = this.statsTotal.hp;
@@ -256,12 +257,43 @@ class Player {
     return this.loadout.includes(skillId);
   }
 
-  cast(skillId) {
-    this.skillCd[skillId] = SKILLS[skillId].cd;
+  // 第 8 批需求②：CD 进账时机可延迟——deferCd=true（蓄力 / 持续释放这类"读条型"）时，
+  //   点击当帧只登记「待落实 CD」，真正的 skillCd 由 commitCd() 在出膛 / 读条收招时写入，
+  //   实现"读条结束才进 CD"；即时释放仍走"按下即进 CD"的原行为（旧配置零改动）。
+  cast(skillId, deferCd) {
+    this.flushStaleCd();
+    const _cd = (SKILLS[skillId] && SKILLS[skillId].cd != null) ? SKILLS[skillId].cd : 0;
+    if (deferCd) {
+      this._pendingCd = this._pendingCd || {};
+      // deadline = 兜底期限：异常路径（施法被打断 / 目标阵亡 / 读条实例被清理）导致未落实时，
+      //   由 flushStaleCd 在之后补写，避免"CD 永久不生效"或"技能卡死"两种坏状态
+      this._pendingCd[skillId] = { cd: _cd, deadline: performance.now() / 1000 + 6 };
+    } else {
+      this.skillCd[skillId] = _cd;
+    }
     // 需求10：释放中窗口（视觉三态用）；配置可经 skills.json 的 castWindow 微调
     const s = SKILLS[skillId] || {};
     const win = (s.castWindow != null && s.castWindow > 0) ? s.castWindow : (s.cd > 1.2 ? 0.45 : 0.25);
     this.castUntil[skillId] = performance.now() / 1000 + win;
+  }
+
+  // 第 8 批需求②：落实延迟 CD（蓄力出膛 / 持续释放收招时调用）
+  commitCd(skillId) {
+    if (!this._pendingCd) return;
+    const it = this._pendingCd[skillId];
+    if (!it) return;
+    delete this._pendingCd[skillId];
+    this.skillCd[skillId] = it.cd;
+  }
+
+  // 第 8 批需求②：兜底——超过 deadline 仍未落实的挂起 CD 就地补写（防异常路径让 CD 永久不生效）
+  flushStaleCd(nowSec) {
+    if (!this._pendingCd) return;
+    const now = (typeof nowSec === 'number') ? nowSec : performance.now() / 1000;
+    for (const k of Object.keys(this._pendingCd)) {
+      const it = this._pendingCd[k];
+      if (it && now >= it.deadline) { delete this._pendingCd[k]; this.skillCd[k] = it.cd; }
+    }
   }
 
   // 触发模块入口（房主结算伤害后调用）

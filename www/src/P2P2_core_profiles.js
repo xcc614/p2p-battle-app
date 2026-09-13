@@ -3,7 +3,7 @@
 //   config/modules.json  -> MODULE_DEFS：模块定义（maxSlots 上限 / source 条目来源库 / allowDuplicate / groups 分组声明 / excludeGroups 排除）
 //                          候选范围不用白名单：由来源库条目的 group 标签与本表 groups 实时对齐，未归属标签收进「未分组」区
 //   config/profiles.json -> PROFILES   ：玩家档案（unitId 底座 + base 覆写 + modules[{moduleId, entries[]}]）
-// 本文件只做三件事（数值合成仍全部交给 src/combat.js，逻辑不重复实现）：
+// 本文件只做三件事（数值合成仍全部交给 src/P2P2_core_combat.js，逻辑不重复实现）：
 //   1. 档案校验 sanitize()：超上限截断 / 未知模块剔除 / 未知条目剔除 / 重复条目去重（房主汇总时调用）
 //   2. 档案装配 applyTo()：base 覆写 + 把每个条目解析成"模块节点"挂到玩家身上（条目可带 add/condition/unlockSkills/mods）
 //   3. 档案选择：byUnit() 按当前单位模板自动匹配（客户端未显式选择时用），current() 读本地显式选择
@@ -127,6 +127,7 @@ const Profiles = {
     const ex = new Set(this.excludeGroups(moduleId));
     const foreign = this._declaredGroupIds();
     return all.filter(id => {
+      if (String(id).startsWith('_')) return false;       // 元信息块（_doc / _note / _releases 等）不是可装载条目
       if (!this.entryDef(moduleId, id)) return false;
       const g = this.groupOf(moduleId, id);
       if (ex.has(g)) return false;                       // 本模块显式排除的分组（Boss 技能等）

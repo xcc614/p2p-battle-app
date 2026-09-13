@@ -781,18 +781,23 @@ input::placeholder { color: #484f58; }
   background: rgba(20, 30, 55, .5); border: 1px solid rgba(120, 150, 255, .22); border-radius: 8px; padding: 5px 10px; }
 .cfg-tab em { font-style: normal; font-size: 11px; color: #8fb4ff; font-family: monospace; }
 .cfg-tab.on { background: rgba(70, 110, 220, .35); border-color: rgba(150, 180, 255, .6); color: #fff; }
-/* 唯一滚动容器：整块“候选池 + 格子区”共用一条纵向滚动条 */
+/* 左右两栏各自独立滚动：滚动左侧候选池不会带动右侧格子区（各模块 装备/宝石/铭文/技能… 共用同一套结构） */
 .cfg-main {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 10px; margin: 6px 0 4px;
   flex: 1 1 auto; min-height: 0; max-height: none;
-  overflow-y: auto; overflow-x: hidden;   /* 纵向只此一处，横向永不出滚动 */
-  overscroll-behavior: contain;           /* 滚到底不带动背景页面 */
+  overflow: hidden;                        /* 面板整体不滚：纵向滚动条下放给左右两栏 */
 }
-.cfg-col { min-width: 0; background: rgba(12, 20, 38, .45); border: 1px solid rgba(120, 150, 255, .16); border-radius: 10px; padding: 8px; }
-.cfg-col-h { font-size: 12px; color: #9db4e8; letter-spacing: .5px; position: sticky; top: 0; z-index: 2;
+.cfg-col { display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: rgba(12, 20, 38, .45); border: 1px solid rgba(120, 150, 255, .16); border-radius: 10px; padding: 8px; }
+.cfg-col-h { flex: 0 0 auto; font-size: 12px; color: #9db4e8; letter-spacing: .5px;
   background: rgba(14, 22, 40, .97); padding: 2px 0 6px; }
-/* 候选池 / 格子区：静态展开，不再各自滚动（消除嵌套双滚动条与错位） */
-.cfg-pool, .cfg-grid { max-height: none; overflow: visible; min-width: 0; }
+/* 候选池 / 格子区：各自一条独立纵向滚动条，互不联动（overscroll 拦截，滚到底不打滑另一栏或背景页） */
+.cfg-pool, .cfg-grid { flex: 1 1 auto; min-height: 0; min-width: 0;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.cfg-pool::-webkit-scrollbar, .cfg-grid::-webkit-scrollbar { width: 8px; }
+.cfg-pool::-webkit-scrollbar-thumb, .cfg-grid::-webkit-scrollbar-thumb {
+  background: rgba(120, 150, 255, .35); border-radius: 4px; }
+.cfg-pool::-webkit-scrollbar-track, .cfg-grid::-webkit-scrollbar-track { background: rgba(20, 30, 55, .3); }
 .cfg-sec { border: 1px solid rgba(120, 150, 255, .14); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
 .cfg-sec .cs-head { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px;
   background: rgba(30, 45, 80, .55); font-size: 12.5px; color: #dfe9ff; }
@@ -830,14 +835,18 @@ input::placeholder { color: #484f58; }
 .cg-cell.dragging { opacity: .5; }
 .cfg-pool.over { outline: 2px dashed rgba(120, 230, 170, .6); outline-offset: 2px; }
 @media (max-width: 720px) {
-  /* 窄屏：两栏叠成单栏，滚动仍只由 .cfg-main 一处承担 */
-  .cfg-main { grid-template-columns: 1fr; }
+  /* 窄屏：两栏叠成单栏，上下各占一半高度，各自仍保留独立滚动条（滚一侧不影响另一侧）；
+     每栏给一个最小可用高度，避免固定头部吃掉高度后某一栏塌成 0 高（不足时整块 .cfg-main 再兜底滚动） */
+  .cfg-main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); overflow-y: auto; }
+  .cfg-pool, .cfg-grid { min-height: 140px; }
+  /* 窄屏下说明文案限高 3 行，避免固定区吃掉滚动区高度 */
+  #panelCfg .bp-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
   .cg-cell { flex: 0 0 100%; }
   #panelCfg .cfg-card { max-height: 92vh; }
-  /* 窄屏下装配来源说明限高 2 行，避免固定区吃掉唯一滚动区高度（点开下拉仍可切换来源） */
+  /* 窄屏下装配来源说明限高 2 行（点开下拉仍可切换来源） */
   #cfgProfileDesc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 }
-/* 矮屏（横屏手机 / 小窗口）：压缩固定头部高度，保证唯一滚动区仍有可用高度、不被裁切 */
+/* 矮屏（横屏手机 / 小窗口）：压缩固定头部高度，保证两栏滚动区仍有可用高度、不被裁切 */
 @media (max-height: 620px) {
   #panelCfg .cfg-card { max-height: 94vh; padding: 12px 14px 10px; }
   #panelCfg .bp-title { font-size: 19px; margin-bottom: 3px; }
@@ -847,7 +856,7 @@ input::placeholder { color: #484f58; }
   #panelCfg .bp-actions { margin-top: 8px; }
   #panelCfg .bp-actions .btn { padding: 7px 0; }
 }
-/* 极矮屏（横屏手机 / 迷你窗口）：说明文案让位，保证页签与操作按钮完整可见；纵向仍只由 .cfg-main 一处滚动 */
+/* 极矮屏（横屏手机 / 迷你窗口）：说明文案让位，保证页签与操作按钮完整可见；两栏仍各自独立滚动 */
 @media (max-height: 460px) {
   #panelCfg .bp-sub { display: none; }
   #panelCfg .bp-title { font-size: 17px; margin-bottom: 2px; }
@@ -856,11 +865,13 @@ input::placeholder { color: #484f58; }
   #panelCfg .bp-actions { margin-top: 6px; }
   #panelCfg .bp-actions .btn { padding: 6px 0; font-size: 13px; }
 }
-/* 极小窗口兜底（可用高度 <400px）：固定区所需高度已超过卡片高度时，改由卡片自身承担唯一滚动，
-   .cfg-main 静态展开，保证页签/按钮/内容都不被裁切，且全页仍只有一条滚动条 */
+/* 极小窗口兜底（可用高度 <400px）：分栏独立滚动会让每栏高度不足，此时改由卡片自身承担唯一滚动，
+   两栏静态展开（内容仍完整可见、不被裁切），保证页签/按钮/内容都不丢 */
 @media (max-height: 400px) {
   #panelCfg .cfg-card { max-height: 94vh; overflow-y: auto; overflow-x: hidden; }
-  #panelCfg .cfg-main { flex: 0 0 auto; min-height: 0; max-height: none; overflow: visible; }
+  #panelCfg .cfg-main { flex: 0 0 auto; min-height: 0; max-height: none; overflow: visible; grid-template-rows: none; }
+  #panelCfg .cfg-col { display: block; }
+  #panelCfg .cfg-pool, #panelCfg .cfg-grid { flex: 0 0 auto; overflow: visible; max-height: none; }
   #panelCfg .cfg-col-h { position: static; }   /* 此模式下取消吸顶，避免盖住标题与页签 */
 }
 /* 触屏：加大可点区域与卸下按钮，拖拽/点按都不易误触 */

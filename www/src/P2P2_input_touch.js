@@ -194,6 +194,11 @@ const Touch = {
         if (Touch.toggleSustain(slot)) return;
         Input.fireSlot(slot);
       });
+      // 第三轮修正·需求③：手势抬起（pointerup / pointercancel）= 蓄力技能的"提前松手"。
+      //   与键盘 keyup 完全同语义：只结束"按住"阶段，剩余蓄力时间继续走，读条走完才真正释放。
+      const onUp = e => { if (Touch.endSkillGesture(parseInt(btn.getAttribute('data-slot'), 10))) e.preventDefault(); };
+      btn.addEventListener('pointerup', onUp);
+      btn.addEventListener('pointercancel', onUp);
       if (!window.PointerEvent) {
         btn.addEventListener('touchstart', e => {
           e.preventDefault();
@@ -201,8 +206,42 @@ const Touch = {
           if (Touch.toggleSustain(slot)) return;   // 需求3：持续技能开关（触屏桥接分支）
           Input.fireSlot(slot);
         }, { passive: false });
+        btn.addEventListener('touchend', onUp, { passive: false });
       }
     });
+  },
+
+  // 第三轮修正·需求③：技能键手势抬起入口（pointerup / pointercancel / touchend 桥接）。
+  //   仅当本机（本地玩家）正在蓄力「该槽位对应的蓄力技能」时才消费本次抬起，
+  //   交由 world.releaseChargeGesture 走与 keyup 相同的"标记松手、继续读条"流程；
+  //   其他技能的抬手不产生任何副作用（返回 false，不拦截默认行为）。
+  endSkillGesture(slot) {
+    const w = this._world || ((typeof App !== 'undefined' && App) ? App.world : null);
+    if (!w || typeof w.releaseChargeGesture !== 'function') return false;
+    const myId = (w.net && w.net.myId != null) ? w.net.myId
+      : ((typeof App !== 'undefined' && App && App.net && App.net.myId != null) ? App.net.myId : null);
+    if (myId == null) return false;
+    const me = (w.players && w.players.get) ? w.players.get(myId) : null;
+    const sid = (me && me.loadout) ? me.loadout[slot] : null;
+    const q = w._charges;
+    if (!sid || !q || !q.length) return false;
+    const item = q.find(c => c.playerId === myId && c.skillId === sid);
+    if (!item || item.hold === false) return false;   // 非按住型蓄力：无松手语义
+    return w.releaseChargeGesture(myId) !== false;
+  },
+
+  // 第三轮修正·需求①/③：本机正在「读条 / 蓄力」中的技能 id（无则 null）。
+  //   CastSystem 只为读条型释放方式登记本机实例（channel 持续释放 / charge 蓄力 / forbid 禁咒 / chant 吟唱），
+  //   瞬间发射不登记。因此"本机存在施法实例"即等价于"该技能正在读条"，按钮据此进入持续释放态。
+  _castingSkillId() {
+    if (typeof CastSystem === 'undefined' || !CastSystem.instances) return null;
+    const w = this._world;
+    const myId = (w && w.net && w.net.myId != null) ? w.net.myId
+      : ((typeof App !== 'undefined' && App && App.net && App.net.myId != null) ? App.net.myId : null);
+    if (myId == null) return null;
+    const it = CastSystem.instances[myId];
+    if (!it || it.remote || !it.skillId) return null;
+    return it.skillId;
   },
 
   // 需求3：持续技能（开关型，即 config/skills.json 里 auto:true 的自动普攻技能）的点按开关。
@@ -277,6 +316,7 @@ const Touch = {
   // 每帧更新：自瞄（最近存活敌人方向，无敌人回退摇杆方向）+ 按钮 CD/就绪视觉
   frame(me, world) {
     if (!this.active || !this.visible || !me || !world) return;
+    this._world = world;   // 第三轮修正·需求①/③：按钮态需要读 CastSystem 的本机施法实例
     let best = null, bd = Infinity;
     world.players.forEach(p => {
       if (p === me || !p.alive || p.team === me.team) return;
@@ -293,7 +333,9 @@ const Touch = {
     this._paint(me);
   },
 
-  // 按钮视觉（三态）：就绪 ready / CD 读秒 cooling（0.3s 一档转圈遮罩 + 剩余秒）/ 持续释放 casting（旋转 LOADING 光环）
+  // 按钮视觉（三态+）：就绪 ready / CD 读秒 cooling（0.3s 一档转圈遮罩 + 剩余秒）/
+  //   持续释放 casting（旋转 LOADING 光环）——第三轮修正后，读条（channel/禁咒/吟唱）与蓄力（charge）
+  //   进行中的技能，其按钮同样进入 casting，不再只显示读条而不进按钮态。
   _sustainOffCd: 1.0,   // 需求3：关闭持续释放类技能（普攻）后的“收招”CD（秒），期间不允许再次开启
   _lastCdTick: 0,
   _paint(me) {
@@ -301,6 +343,7 @@ const Touch = {
     const now = performance.now();
     const doTick = now - this._lastCdTick >= 300;   // 0.3s 一档刷新倒计时视觉
     if (doTick) this._lastCdTick = now;
+    const castSid = this._castingSkillId();   // 第三轮修正·需求①/③：本机读条/蓄力中的技能 id（无则 null）
     // 需求3：App 是 main.js 顶层的 const（全局词法绑定），不会挂到 window 上；
     // 旧代码用 window.App 恒为 undefined，导致持续释放态永远判定为“关闭”，按钮一直卡在 CD 转圈。
     const autoOn = !!(typeof App !== 'undefined' && App && App.autoAttack);
@@ -330,6 +373,14 @@ const Touch = {
         if (sustainOn) {
           // 第三态：持续释放中（旋转光环）。此态优先于 CD —— 持续施放期间技能本身会不停刷新冷却，
           // 若按 CD 判断会表现为“CD 一直在转、永远转不完”，与需求3 的期望相反。
+          btn.classList.add('casting');
+          if (label) label.textContent = shortSkillName(sid);
+          btn.style.removeProperty('--cd');
+        } else if (castSid && castSid === sid) {
+          // 第三轮修正·需求①/③：读条 / 蓄力进行中 → 「持续释放中」态（沿用同一套转圈光环）。
+          //   该分支必须早于 CD 判断：deferCd 机制下读条期间 CD 尚未落实（skillCd 仍为 0），
+          //   旧实现会把按钮判成「就绪可点」，表现为"只在屏幕里读条、按钮不进态"。
+          //   蓄力提前松手后（item.released）读条继续走，故此态一直保持到真正出膛。
           btn.classList.add('casting');
           if (label) label.textContent = shortSkillName(sid);
           btn.style.removeProperty('--cd');

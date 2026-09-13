@@ -109,21 +109,58 @@ class Renderer {
   }
 
   // 通用形状纹理：64 画布中心绘制 + 缓存，Sprite 拉伸到目标尺寸
-  // （P3：新增 arrow/triangle/diamond/square/star/ring，供 bullets.json 按 shape 配置；无图/贴图依赖）
-  _shapeTexture(shape, color) {
-    const key = 'shape_' + shape + '_' + color;
+  // 需求9：形状/颜色扩展 —— 支持 arrow / triangle / diamond / square / star / ring / circle /
+  //   pentagon（五边形）/ hexagon（六边形）/ octagon（八边形）/ cross（十字）/ crescent（月牙）/
+  //   blade（刀刃）/ spike（尖刺）/ drop（水滴）/ capsule（胶囊）/ burst（放射爆裂）。
+  //   第二色 colorB：圆形系（circle/ring/star/burst/五边形/六边形/八边形）做径向"内芯"渐变，
+  //   指向系形状做沿飞行轴（+x）的线性渐变；不传 colorB 时与旧版完全一致（单色填充）。
+  _shapeTexture(shape, color, color2) {
+    const c2 = color2 || '';
+    const key = 'shape_' + shape + '_' + color + '_' + c2;
     if (this.texCache.has(key)) return this.texCache.get(key);
     const c = document.createElement('canvas');
     const S = 64, mid = 32, R = 24;
     c.width = c.height = S;
     const g = c.getContext('2d');
-    g.fillStyle = color;
-    g.strokeStyle = color;
+    // 双色：内芯/高光色（colorB）与主色（color）
+    const RADIAL2 = { circle: 1, ring: 1, star: 1, burst: 1, pentagon: 1, hexagon: 1, octagon: 1 };
+    let fill = color, stroke = color;
+    if (c2) {
+      if (RADIAL2[shape]) {
+        const rg = g.createRadialGradient(mid, mid, 1, mid, mid, R);
+        rg.addColorStop(0, c2);
+        rg.addColorStop(1, color);
+        fill = rg;
+      } else {
+        const lg = g.createLinearGradient(mid - R, mid, mid + R, mid);
+        lg.addColorStop(0, c2);
+        lg.addColorStop(1, color);
+        fill = lg;
+      }
+      stroke = c2;
+    }
+    g.fillStyle = fill;
+    g.strokeStyle = stroke;
     g.beginPath();
+    // 正多边形路径（n 边形，rot 起始角）
+    const poly = (n, r, rot) => {
+      for (let i = 0; i < n; i++) {
+        const a = (rot || 0) + (i * Math.PI * 2) / n;
+        const x = mid + Math.cos(a) * r, y = mid + Math.sin(a) * r;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.closePath();
+    };
     if (shape === 'ring') {
       g.arc(mid, mid, R - 5, 0, Math.PI * 2);
       g.lineWidth = 6;
       g.stroke();
+      if (c2) {   // 第二色：内环高光
+        g.beginPath();
+        g.arc(mid, mid, R - 13, 0, Math.PI * 2);
+        g.lineWidth = 3;
+        g.stroke();
+      }
     } else if (shape === 'square') {
       g.rect(mid - R * 0.85, mid - R * 0.85, R * 1.7, R * 1.7);
       g.fill();
@@ -139,6 +176,31 @@ class Renderer {
         if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
       }
       g.closePath(); g.fill();
+    } else if (shape === 'burst') {
+      // 放射爆裂：12 齿尖刺（外径 R / 内径 0.5R）
+      const p = 12;
+      for (let i = 0; i < p * 2; i++) {
+        const rad = i % 2 === 0 ? R : R * 0.5;
+        const a = -Math.PI / 2 + (i * Math.PI) / p;
+        const x = mid + Math.cos(a) * rad, y = mid + Math.sin(a) * rad;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.closePath(); g.fill();
+    } else if (shape === 'pentagon') {
+      poly(5, R, -Math.PI / 2); g.fill();
+    } else if (shape === 'hexagon') {
+      poly(6, R, 0); g.fill();
+    } else if (shape === 'octagon') {
+      poly(8, R, Math.PI / 8); g.fill();
+    } else if (shape === 'cross') {
+      const a = R * 0.34;                    // 十字臂宽
+      g.moveTo(mid - a, mid - R); g.lineTo(mid + a, mid - R);
+      g.lineTo(mid + a, mid - a); g.lineTo(mid + R, mid - a);
+      g.lineTo(mid + R, mid + a); g.lineTo(mid + a, mid + a);
+      g.lineTo(mid + a, mid + R); g.lineTo(mid - a, mid + R);
+      g.lineTo(mid - a, mid + a); g.lineTo(mid - R, mid + a);
+      g.lineTo(mid - R, mid - a); g.lineTo(mid - a, mid - a);
+      g.closePath(); g.fill();
     } else if (shape === 'arrow') {
       // 尖头箭头：头部右侧顶点，视觉沿飞行方向拉伸（需配合 sprite 旋转）
       g.moveTo(mid + R, mid);
@@ -151,7 +213,49 @@ class Renderer {
       g.lineTo(mid - R * 0.72, mid - R);
       g.lineTo(mid - R * 0.72, mid + R);
       g.closePath(); g.fill();
+    } else if (shape === 'blade') {
+      // 刀刃：细长弯刃，尖头朝 +x（近战斩击/突刺用）
+      g.moveTo(mid + R, mid);
+      g.lineTo(mid - R * 0.55, mid - R * 0.55);
+      g.lineTo(mid - R * 0.85, mid - R * 0.16);
+      g.lineTo(mid - R * 0.35, mid + R * 0.42);
+      g.lineTo(mid + R * 0.35, mid + R * 0.28);
+      g.closePath(); g.fill();
+    } else if (shape === 'spike') {
+      // 尖刺：长锥（高穿透近战/穿刺弹）
+      g.moveTo(mid + R, mid);
+      g.lineTo(mid - R * 0.9, mid - R * 0.3);
+      g.lineTo(mid - R * 0.62, mid);
+      g.lineTo(mid - R * 0.9, mid + R * 0.3);
+      g.closePath(); g.fill();
+    } else if (shape === 'drop') {
+      // 水滴：圆头 + 尖端朝 +x
+      g.arc(mid - R * 0.34, mid, R * 0.72, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(mid + R, mid);
+      g.lineTo(mid - R * 0.3, mid - R * 0.66);
+      g.lineTo(mid - R * 0.3, mid + R * 0.66);
+      g.closePath(); g.fill();
+    } else if (shape === 'capsule') {
+      // 胶囊：圆角长条（沿 +x 拉长的实心弹）
+      const hw = R, hh = R * 0.42, rd = hh;
+      g.moveTo(mid - hw + rd, mid - hh);
+      g.lineTo(mid + hw - rd, mid - hh);
+      g.quadraticCurveTo(mid + hw, mid - hh, mid + hw, mid);
+      g.quadraticCurveTo(mid + hw, mid + hh, mid + hw - rd, mid + hh);
+      g.lineTo(mid - hw + rd, mid + hh);
+      g.quadraticCurveTo(mid - hw, mid + hh, mid - hw, mid);
+      g.quadraticCurveTo(mid - hw, mid - hh, mid - hw + rd, mid - hh);
+      g.closePath(); g.fill();
+    } else if (shape === 'crescent') {
+      // 月牙：外圆挖去偏移内圆（even-odd 填充）
+      g.arc(mid, mid, R, -Math.PI * 0.42, Math.PI * 0.42);
+      g.arc(mid - R * 0.36, mid, R * 0.86, Math.PI * 0.42, -Math.PI * 0.42, true);
+      g.closePath();
+      g.fill('evenodd');
     } else {
+      // circle 或未知形状：保持既有圆形色块回退（assets 为空时的兜底不受影响）
       g.arc(mid, mid, R, 0, Math.PI * 2);
       g.fill();
     }
@@ -296,6 +400,54 @@ class Renderer {
     this.entityViews.set(p.id, { root, spr, hpBg, hpBar, nameText, texKey: key, lastHp: -1, lastAlive: null });
   }
 
+  // 本轮新增（撕裂 DoT）：玩家身上持续掉血标识——紫色脉动外环 + 层数角标。
+  //   数据源 BuffSystem.dotsOf(p)：房主本机（结算写入）、远端（dot_add 广播镜像）、
+  //   中途加入/重连（快照 dots 对齐）三处都落到同一字段，渲染层只读不写，纯表现。
+  //   底部状态栏 / Boss 条的状态 chip 由 BuffSystem.visible() 自动带上（defId='tear'），此处只画身上标识。
+  _syncTearMark(v, p) {
+    if (!v || !v.root) return;
+    const dots = (p && p.alive && typeof BuffSystem !== 'undefined' && BuffSystem.dotsOf)
+      ? BuffSystem.dotsOf(p) : [];
+    const d = dots.find(x => x && x.defId === 'tear') || null;
+    if (!d) {
+      if (v.tearRing) v.tearRing.visible = false;
+      if (v.tearStacks) v.tearStacks.visible = false;
+      return;
+    }
+    const nowS = performance.now() / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(nowS * 6.5);          // 脉动
+    const stacks = Math.max(1, d.stacks || 1);
+    const base = p.radius || 26;
+    const r = base + 6 + pulse * 2;
+    const col = this._hexNum(d.color || '#c04bff');
+    // 外环：层数越多越粗（视觉上直观反映叠层强度）
+    if (!v.tearRing) {
+      const ring = new PIXI.Graphics();
+      v.root.addChildAt(ring, 0);                            // 置于实体贴图之下，避免遮挡角色
+      v.tearRing = ring;
+    }
+    const g = v.tearRing;
+    g.visible = true;
+    g.clear();
+    g.circle(0, 0, r).stroke({ width: 2 + stacks, color: col, alpha: 0.55 + 0.35 * pulse });
+    g.circle(0, 0, r + 4 * stacks).stroke({ width: 1, color: col, alpha: 0.25 + 0.25 * pulse });
+    // 层数角标（仅叠层时显示）
+    if (!v.tearStacks) {
+      const t = new PIXI.Text({ text: '', style: { fontFamily: 'sans-serif', fontSize: 13, fontWeight: 'bold',
+        fill: 0xffffff, stroke: { color: 0x4a1060, width: 3 } } });
+      t.anchor.set(0.5, 1);
+      v.root.addChild(t);
+      v.tearStacks = t;
+    }
+    const st = v.tearStacks;
+    st.visible = stacks > 1;
+    if (stacks > 1) {
+      st.text = 'x' + stacks;
+      st.position.set(0, -(r + 6));
+      st.style.fill = d.color || '#c04bff';
+    }
+  }
+
   removePlayer(id) {
     const v = this.entityViews.get(id);
     if (v) {
@@ -308,11 +460,20 @@ class Renderer {
   addBullet(b) {
     if (this.bulletViews.has(b.id)) return;
     const cfg = b.cfg || {};
-    const color = cfg.color || '#ffffff';
-    const shape = cfg.shape || 'circle';
+    // 需求9：形状 / 颜色以「运行时覆盖 b.shape / b.color / b.colorB」优先（技能 lookOpts 下发的覆盖），
+    // 回退到弹型自身配置，保证同一弹型可被不同技能染成不同形状/颜色。
+    const color = b.color || cfg.color || '#ffffff';
+    const color2 = b.colorB || cfg.colorB || null;
+    const shape = b.shape || cfg.shape || 'circle';
     const isBeam = shape === 'beam' || shape === 'line';
-    // 带方向形状需按飞行方向旋转（beam/line 是细长条，arrow/triangle/diamond 尖头朝前）
-    const dirShape = isBeam || shape === 'arrow' || shape === 'triangle' || shape === 'diamond';
+    // 带方向形状需按飞行方向旋转（beam/line 是细长条，其余尖头朝 +x）
+    const DIR_SHAPES = { beam: 1, line: 1, arrow: 1, triangle: 1, diamond: 1,
+                         blade: 1, spike: 1, drop: 1, capsule: 1, crescent: 1 };
+    const dirShape = !!DIR_SHAPES[shape];
+    // 形状纹理可覆盖的弹型清单（其余形状走 image 贴图 / 圆形色块回退）
+    const SHAPE_TEX = { circle: 1, ring: 1, square: 1, diamond: 1, star: 1, burst: 1,
+                        arrow: 1, triangle: 1, pentagon: 1, hexagon: 1, octagon: 1,
+                        cross: 1, blade: 1, spike: 1, drop: 1, capsule: 1, crescent: 1 };
     const size = Math.max(3, b.radius * 2);
     const root = new PIXI.Container();
     let spr;
@@ -332,18 +493,82 @@ class Renderer {
       spr.width = (cfg.length || 60) + size;
       spr.height = Math.max(3, size * (shape === 'line' ? 0.8 : 1));
       spr.alpha = shape === 'beam' ? 0.95 : 0.8;
-    } else if (shape === 'ring' || shape === 'arrow' || shape === 'triangle' || shape === 'diamond' || shape === 'square' || shape === 'star') {
-      spr = new PIXI.Sprite(this._shapeTexture(shape, color));
+    } else if (shape === 'ring' && b.radius >= 40) {
+      // 大半径环形（领域 / 范围 / 落点圈）：用 Graphics 按精确半径描边，避免纹理拉伸导致半径偏差
+      const lg = new PIXI.Graphics();
+      const a1 = (cfg.alpha != null) ? cfg.alpha : 0.7;
+      lg.circle(0, 0, b.radius).stroke({ width: 4, color: this._hexNum(color), alpha: a1 });
+      if (color2) lg.circle(0, 0, Math.max(4, b.radius * 0.62)).stroke({ width: 2, color: this._hexNum(color2), alpha: a1 * 0.8 });
+      spr = lg;
+    } else if (SHAPE_TEX[shape]) {
+      // 形状纹理统一走 _shapeTexture（含需求9新增形状与 colorB 双色）
+      spr = new PIXI.Sprite(this._shapeTexture(shape, color, color2));
       spr.anchor.set(0.5);
       spr.width = spr.height = size;
+      if (cfg.alpha != null) spr.alpha = cfg.alpha;
     } else {
-      // circle 或未知 shape：保留 image 贴图优先、缺图回退圆形色块的既有机制
+      // 未知 shape：保留 image 贴图优先、缺图回退圆形色块的既有机制
       const { tex, key } = this._entityTexture(cfg, color, b.radius);
       spr = new PIXI.Sprite(tex);
       spr.anchor.set(0.5);
       spr.width = spr.height = size;
     }
     root.addChild(spr);
+    // 需求11/②/⑥：落点结算圈可视化 —— 携带 landing 的落弹，在结算圆心画出半透明圆形结算区
+    // （结算逻辑由 P2P2_battle_bullet / P2P2_battle_world 负责，这里只做可视化，圆心为世界坐标）
+    // 本轮：加大描边宽度与不透明度、补内圈与"锁定"标识，保证看得清、不闪没；
+    //       半径严格取 landing.r（= 实际结算半径），与判定数据同源，所见即所得。
+    // 第三轮修正·需求②（根因修复）：结算圈坐标必须是「世界坐标 + 有限数」。
+    //   ① 坐标口径：本方法里子弹 root 恒挂在场地原点 (0,0)（同一约定见 spr / glow：每帧直接写世界坐标，
+    //      历史上 glow 只同步 spr 而自己停在容器本地 (0,0)，就在左上角留下大圆斑）。结算圈旧写法用
+    //      (b.landing.x - b.x, b.landing.y - b.y) —— 把"相对偏移"当成了世界坐标，于是被画到世界坐标的
+    //      偏移量处：天降类（strike / barrage，子弹出生于落点正上方 fall 距离）恒得 (0, fall)，即
+    //      「左墙靠上」位置多出一个技能圈，且创建后不再跟随落点。改为直接写落点世界坐标。
+    //   ② 有限性：旧写法 `|| 0` 会把 NaN / undefined 兜成 0，一旦落点数据异常就把圈画到左上角。
+    //      这里改为有限数校验，非有限则整圈不绘制（宁可不画，也不画错位置）。
+    let landG = null;
+    if (b.landing && Number.isFinite(b.landing.x) && Number.isFinite(b.landing.y)) {
+      const lr = Math.max(8, b.landing.r || 60);
+      const lc = this._hexNum(cfg.landColor || color);
+      const lfx = (GAME_CONFIG.FX && GAME_CONFIG.FX.landing) || {};
+      const lfa = (lfx.fillAlpha != null) ? lfx.fillAlpha : 0.2;
+      const lsa = (lfx.strokeAlpha != null) ? lfx.strokeAlpha : 0.98;
+      // ②（本轮）：线宽取「技能级 landingMarkWidth > 全局 FX.landing.width」；外发光与内圈双环可配
+      const lw = Math.max(1, (b.landing.width != null) ? b.landing.width : ((lfx.width != null) ? lfx.width : 7));
+      const lglow = (b.landing.glow != null) ? !!b.landing.glow : (lfx.glow !== false);
+      const ldual = (lfx.doubleRing !== false);
+      const lgw = Math.max(2, (lfx.glowWidth != null) ? lfx.glowWidth : lw * 1.9);
+      const lga = (lfx.glowAlpha != null) ? lfx.glowAlpha : 0.28;
+      const locked = (b.landing.trackId != null);
+      try {
+        const lg = new PIXI.Graphics();
+        // 更亮：外发光圈打底 → 半透明填充 → 主圈加粗 → 内圈双环（与预告圈/禁咒判定点风格一致）
+        if (lglow) lg.circle(0, 0, lr + Math.max(1, lw * 0.35)).stroke({ width: lgw, color: lc, alpha: lga });
+        lg.circle(0, 0, lr).fill({ color: lc, alpha: lfa });
+        lg.circle(0, 0, lr).stroke({ width: lw, color: lc, alpha: lsa });
+        if (ldual) lg.circle(0, 0, Math.max(6, lr * 0.55)).stroke({ width: Math.max(2, lw - 3), color: 0xffffff, alpha: lsa * 0.55 });
+        if (locked) {
+          // 锁定标识（预判目标时）：四个方向的卡角，让"锁定中"一眼可辨
+          const t = Math.max(6, lr * 0.35), sw = Math.max(3, lw - 1);
+          for (const s of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            lg.moveTo(s[0] * lr, s[1] * (lr - t)).lineTo(s[0] * lr, s[1] * lr).lineTo(s[0] * (lr - t), s[1] * lr)
+              .stroke({ width: sw, color: 0xffd76a, alpha: 0.95 });
+          }
+        }
+        // 世界坐标（root 本地原点 = 场地原点），与 mark / settle 预告圈及判定数据同源
+        lg.position.set(b.landing.x, b.landing.y);
+        root.addChild(lg);
+        landG = lg;
+      } catch (e) {
+        const mk = new PIXI.Sprite(this._shapeTexture('ring', cfg.landColor || color, null));
+        mk.anchor.set(0.5);
+        mk.alpha = 0.6;
+        mk.width = mk.height = lr * 2 / 0.6;
+        mk.position.set(b.landing.x, b.landing.y);
+        root.addChild(mk);
+        landG = mk;
+      }
+    }
     // 发光外圈（Boss/高威胁弹视觉强化，可配 glow / glowColor / glowScale / glowAlpha）
     let glowSpr = null;
     if (cfg.glow && this.glowEnabled) {
@@ -354,16 +579,100 @@ class Renderer {
       root.addChild(gs);
       glowSpr = gs;
     }
+    // 需求⑤（第 4 条）：投掷弹的「飞行过程」承载图形 —— 抛物线预览 + 已飞轨迹 + 地面影子。
+    //   与特效同层（fxLayer = 世界坐标），每帧由 _drawThrowPath 重绘；
+    //   数据完全来自 bullet.throw（各端同源、无随机、不新增网络字段），子弹移除时一并销毁。
+    let throwG = null;
+    if (b.throw && typeof b.throw.x0 === 'number' && typeof b.throw.tx === 'number') {
+      try { throwG = new PIXI.Graphics(); this.fxLayer.addChild(throwG); } catch (e) { throwG = null; }
+    }
     this.bulletLayer.addChild(root);
-    this.bulletViews.set(b.id, { root, spr, glow: glowSpr, dirShape: !!dirShape, shape, lastTrail: 0 });
+    this.bulletViews.set(b.id, { root, spr, glow: glowSpr, dirShape: !!dirShape, shape, lastTrail: 0, throwG, landG });
   }
 
   removeBullet(id) {
     const v = this.bulletViews.get(id);
     if (v) {
+      // 需求⑤（第 4 条）：投掷弹的轨迹图形挂在 fxLayer（不在 root 下），需单独摘除销毁，避免残留
+      if (v.throwG) {
+        try { this.fxLayer.removeChild(v.throwG); v.throwG.destroy(); } catch (e) { /* ignore */ }
+        v.throwG = null;
+      }
       this.bulletLayer.removeChild(v.root);
       v.root.destroy({ children: true });
       this.bulletViews.delete(id);
+    }
+  }
+
+  // 第 4 条（圆域投弹）：投掷弹的「飞行过程」可视化——抛物线预览 + 已飞轨迹 + 地面影子。
+  //   数据全部取自 bullet.throw（x0/y0/tx/ty/dur/peak），各端同源、无随机、不新增网络字段；
+  //   每帧重绘（10 发 × 约 24 段线，开销可忽略），子弹移除时随 throwG 一并销毁。
+  _drawThrowPath(v, b) {
+    const g = v.throwG;
+    if (!g) return;
+    const th = b.throw;
+    if (!th || typeof th.x0 !== 'number' || typeof th.tx !== 'number') { g.clear(); return; }
+    const x0 = th.x0, y0 = th.y0, tx = th.tx, ty = th.ty;
+    const peak = Math.max(0, th.peak || 0);
+    const dur = Math.max(0.12, th.dur || 0.55);
+    const p = Math.max(0, Math.min(1, (th.t || 0) / dur));
+    const col = this._hexNum(b.color || (b.cfg && b.cfg.color) || '#8ad2ff');
+    const N = 24;
+    const pAll = (k) => x0 + (tx - x0) * k;
+    const qAll = (k) => y0 + (ty - y0) * k - peak * Math.sin(Math.PI * k);
+    g.clear();
+    // ① 地面连线（出手点 → 落点，淡）：看清"投到哪"
+    g.moveTo(x0, y0).lineTo(tx, ty).stroke({ width: 2, color: col, alpha: 0.14 });
+    // ② 完整抛物线虚线预览：看清"飞行路线"
+    for (let i = 0; i < N; i += 2) {
+      const a = i / N, c = Math.min(1, (i + 1) / N);
+      g.moveTo(pAll(a), qAll(a)).lineTo(pAll(c), qAll(c));
+    }
+    g.stroke({ width: 2, color: col, alpha: 0.3 });
+    // ③ 已飞过部分：外发光 + 亮线，飞行中轨迹逐步点亮
+    const seg = Math.max(1, Math.round(N * p));
+    g.moveTo(pAll(0), qAll(0));
+    for (let i = 1; i <= seg; i++) g.lineTo(pAll(Math.min(1, i / N)), qAll(Math.min(1, i / N)));
+    g.stroke({ width: 9, color: col, alpha: 0.18 });
+    g.moveTo(pAll(0), qAll(0));
+    for (let i = 1; i <= seg; i++) g.lineTo(pAll(Math.min(1, i / N)), qAll(Math.min(1, i / N)));
+    g.stroke({ width: 3, color: 0xffffff, alpha: 0.5 });
+    // ④ 地面影子：当前弹体正下方的投影，越高越小越淡（强化"在空中飞"的立体感）
+    const gx = pAll(p), gy = y0 + (ty - y0) * p;
+    const h = Math.max(0, gy - b.y);
+    const k = Math.max(0.28, 1 - h / Math.max(1, peak * 1.6));
+    const rr = Math.max(3, (b.radius || 6) * 1.35 * k);
+    g.ellipse(gx, gy, rr, rr * 0.4).fill({ color: 0x000000, alpha: 0.14 + 0.16 * k });
+    g.ellipse(gx, gy, rr, rr * 0.4).stroke({ width: 2, color: col, alpha: 0.35 * k });
+    // ⑤ 出手点标识：固定标注"从哪投出"
+    g.circle(x0, y0, 8).stroke({ width: 2, color: col, alpha: 0.42 });
+  }
+
+  // 第 4 条（圆域投弹）：投掷起手表现——施法者处的手部光斑 + 环形脉冲 + 指向落点的粒子喷出。
+  fxThrowCast(x, y, color, opt) {
+    opt = opt || {};
+    const tx = (opt.tx != null) ? opt.tx : (x + 60);
+    const ty = (opt.ty != null) ? opt.ty : y;
+    const cnum = this._hexNum(color);
+    // ① 出手光斑（快速扩散淡出）
+    const f = new PIXI.Sprite(this._colorTexture(color, 18));
+    f.anchor.set(0.5); f.x = x; f.y = y;
+    this._pushFx(f, { kind: 'f', grow: 2.2, life: 0.26 });
+    // ② 环形脉冲（"抬手蓄势"）
+    const ring = new PIXI.Sprite(this._ring);
+    ring.anchor.set(0.5); ring.x = x; ring.y = y; ring.tint = cnum;
+    ring.width = ring.height = 16;
+    this._pushFx(ring, { kind: 'r', grow: 120, life: 0.45 });
+    // ③ 沿投掷方向喷出的粒子（短促的"抛出"手感，方向 = 指向落点）
+    const a = Math.atan2(ty - y, tx - x);
+    for (let i = 0; i < 8; i++) {
+      const s = new PIXI.Sprite(this._white);
+      s.anchor.set(0.5); s.x = x; s.y = y; s.tint = cnum;
+      s.width = s.height = 5 + Math.random() * 4;
+      const sp = 190 + Math.random() * 160;
+      const aa = a + (Math.random() - 0.5) * 0.6;
+      this._pushFx(s, { kind: 'p', vx: Math.cos(aa) * sp, vy: Math.sin(aa) * sp - 40,
+        life: 0.28 + Math.random() * 0.16 });
     }
   }
 
@@ -385,7 +694,13 @@ class Renderer {
   // ---- 特效系统 ----
   _pushFx(spr, opt) {
     const kind = opt.kind || 'p';
-    const f = { spr, life: opt.life || 0.6, max: opt.life || 0.6, kind, vx: opt.vx || 0, vy: opt.vy || 0, grow: opt.grow || 0, baseScale: opt.baseScale || 1, spin: opt.spin || 0 };
+    const f = { spr, life: opt.life || 0.6, max: opt.life || 0.6, kind, vx: opt.vx || 0, vy: opt.vy || 0, grow: opt.grow || 0, baseScale: opt.baseScale || 1, spin: opt.spin || 0,
+      // ②（本轮）：预告/结算圈（kind 'mk'）的呼吸幅度与尾部淡出时长可配
+      pulseAmp: (opt.pulseAmp != null) ? opt.pulseAmp : 0.12,
+      fadeTail: (opt.fadeTail != null) ? opt.fadeTail : 0.35,
+      // ②（本轮）：预告圈跟随锁定目标——trackId = 目标实体 id，lead = 提前量（秒）
+      trackId: (opt.trackId != null) ? opt.trackId : null,
+      lead: (typeof opt.lead === 'number' && isFinite(opt.lead)) ? opt.lead : 0 };
     // 圆环(kind 'r')：grow 语义=最终像素直径，d0 记录初始像素直径，避免旧 scale 语义把环撑成全屏
     if (kind === 'r') { f.d0 = (spr.width || 10); f.grow = opt.grow || f.d0; }
     this.fxSprites.push(f);
@@ -508,6 +823,124 @@ class Renderer {
     this._pushFx(fl2, { kind: 'f', grow: 1.5, life: 0.3 });
   }
 
+  // 需求②：落点 / 判定提示（世界坐标地面指示圈）
+  //   与"结算圈"不同：这是"即将发生"的预告（天降落矛瞄准圈、投弹落点、禁咒判定点），
+  //   life 缺省取 GAME_CONFIG.FX.mark.life（默认 2.4s），停留期间常亮 + 呼吸，不再一闪就没；
+  //   半径严格等于实际判定半径，锁定目标时额外画金色卡角。
+  fxMark(x, y, color, radius, opt) {
+    const o = opt || {};
+    // 第三轮修正·需求②（加固）：预告圈坐标非有限时整圈不绘制 —— 避免 NaN 经 PIXI 归一成 0 后钉在左上角
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const conf = (GAME_CONFIG.FX && GAME_CONFIG.FX.mark) || {};
+    const r = Math.max(8, radius || 60);
+    const life = (o.life != null && o.life > 0) ? o.life : ((conf.life != null) ? conf.life : 2.4);
+    const c = this._hexNum(color || '#8ad2ff');
+    // ②（本轮）：线宽 / 外发光 / 内圈双环 —— 全部可配（GAME_CONFIG.FX.mark），
+    //   并支持单次推送覆盖（技能级 landingMarkWidth / landingMarkGlow 经 pushFx('mark') 下发）
+    const lw = Math.max(1, (o.width != null) ? o.width : ((conf.width != null) ? conf.width : 7));
+    const glow = (o.glow != null) ? !!o.glow : (conf.glow !== false);
+    const dual = (o.doubleRing != null) ? !!o.doubleRing : (conf.doubleRing !== false);
+    const gw = Math.max(2, (conf.glowWidth != null) ? conf.glowWidth : lw * 1.9);
+    const ga = (conf.glowAlpha != null) ? conf.glowAlpha : 0.3;
+    const g = new PIXI.Graphics();
+    // 第 6 条（本轮）：多圈模式（天降落矛等多发天降技能）——
+    //   o.points = 各发落点相对「簇中心」的固定偏移（与子弹 landing 的 offX/offY 同一份数据）；
+    //   o.ringR  = 整簇包络圈半径（= 簇半径 + 结算半径）；o.r = 单发结算半径；
+    //   两者与真实结算范围完全同源，因此"预告圈 = 落点"，不再出现一个用整簇半径、一个用簇内散点的错位。
+    const pts = Array.isArray(o.points) ? o.points : null;
+    const ringR = (o.ringR != null && isFinite(o.ringR)) ? Math.max(8, o.ringR) : null;
+    const lockR = (pts && ringR) ? ringR : r;
+    // 第 8 批需求①：单圈模式（区域轰炸 / 区域投弹等"范围提示"类）——只画一个范围圈：
+    //   无外发光圈 / 无内圈双环 / 无逐发落点小圈 / 无收缩进度环 / 无金色卡角。
+    //   半径由调用方给出（= 技能释放范围/整簇覆盖半径），语义为"这片区域会被打到"。
+    const simple = (o.simple === true);
+    if (simple) {
+      g.circle(0, 0, r).fill({ color: c, alpha: (conf.fillAlpha != null) ? conf.fillAlpha : 0.16 });
+      g.circle(0, 0, r).stroke({ width: lw, color: c, alpha: (conf.strokeAlpha != null) ? conf.strokeAlpha : 0.95 });
+    } else if (pts && pts.length) {
+      const sx = (conf.strokeAlpha != null) ? conf.strokeAlpha : 0.95;
+      const fl = (conf.fillAlpha != null) ? conf.fillAlpha : 0.2;
+      // 整簇包络圈：外发光 + 主圈
+      if (ringR) {
+        if (glow) g.circle(0, 0, ringR + Math.max(1, lw * 0.35)).stroke({ width: gw, color: c, alpha: ga });
+        g.circle(0, 0, ringR).stroke({ width: lw, color: c, alpha: sx });
+      }
+      // 逐发落点小圈：圆心 = 簇中心 + 该项固定偏移（与子弹 landing 一致）
+      for (const p of pts) {
+        const px = (p && typeof p.x === 'number' && isFinite(p.x)) ? p.x : 0;
+        const py = (p && typeof p.y === 'number' && isFinite(p.y)) ? p.y : 0;
+        g.circle(px, py, r).fill({ color: c, alpha: fl });
+        g.circle(px, py, r).stroke({ width: lw, color: c, alpha: sx });
+      }
+    } else {
+      // 更亮：外发光圈（大线宽低透明度打底）→ 半透明填充 → 主圈加粗 → 内圈双环（禁止负半径，最小 8px）
+      if (glow) g.circle(0, 0, r + Math.max(1, lw * 0.35)).stroke({ width: gw, color: c, alpha: ga });
+      g.circle(0, 0, r).fill({ color: c, alpha: (conf.fillAlpha != null) ? conf.fillAlpha : 0.2 });
+      g.circle(0, 0, r).stroke({ width: lw, color: c, alpha: (conf.strokeAlpha != null) ? conf.strokeAlpha : 0.95 });
+      if (dual) g.circle(0, 0, Math.max(6, r * 0.62)).stroke({ width: Math.max(2, lw - 3), color: 0xffffff, alpha: 0.55 });
+    }
+    if (o.lock && !simple) {
+      const t = Math.max(6, lockR * 0.4), sw = Math.max(3, lw - 1);
+      for (const s of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        g.moveTo(s[0] * lockR, s[1] * (lockR - t)).lineTo(s[0] * lockR, s[1] * lockR).lineTo(s[0] * (lockR - t), s[1] * lockR)
+          .stroke({ width: sw, color: 0xffd76a, alpha: 0.95 });
+      }
+    }
+    // ②（本轮）：改用 Container 承载 —— 静态样式环（半径恒等判定半径）+ 内圈收缩进度环（直观提示"还剩多久落地结算"）
+    // 第 6 条（本轮）：容器锚点 = 「落点簇中心」，各落点以小圈相对簇中心绘制；
+    //   跟随（trackId/lead/trackRate）整体平移容器，与子弹 landing（簇中心 + 固定偏移）严格同源。
+    const wrap = new PIXI.Container();
+    wrap.x = x; wrap.y = y;
+    wrap.addChild(g);
+    let prog = null;
+    if (!simple && ((o.progress != null) ? !!o.progress : (conf.progress !== false))) {
+      prog = new PIXI.Graphics();
+      prog.circle(0, 0, (pts && ringR) ? ringR : r).stroke({ width: Math.max(2, lw * 0.9), color: 0xffffff, alpha: 0.7 });
+      wrap.addChild(prog);
+    }
+    // ②（本轮）：trackId / lead 让预告圈跟随锁定目标的真实位置（渲染侧每帧同步），
+    //   与子弹 landing 的"飞行途中向目标靠拢"锁定同一目标，保证圈与落点始终一致
+    const f = this._pushFx(wrap, { kind: 'mk', life: life,
+      trackId: (o.trackId != null) ? o.trackId : null,
+      lead: (typeof o.lead === 'number' && isFinite(o.lead)) ? o.lead : 0,
+      // 第 5 条（本轮）：跟随速率可配（每秒吸附比例）——领域类"以施法者为中心"要求贴得紧，缺省 24；
+      //   落点锁定类（第 6 条）沿用较柔和的缺省，避免圆环跟得太硬显得抖动
+      trackRate: (o.trackRate != null && isFinite(o.trackRate)) ? Math.max(1, o.trackRate)
+        : ((conf.trackRate != null) ? conf.trackRate : 12),
+      // 第 5 条（本轮）：硬跟随开关——true 时圆心每帧直接置为目标位置（零滞后），领域"恒以施法者为中心"用它
+      trackSnap: (o.trackSnap != null) ? !!o.trackSnap : (conf.trackSnap === true),
+      pulseAmp: (conf.pulseAmp != null) ? conf.pulseAmp : 0.12,
+      fadeTail: (conf.fadeTail != null) ? conf.fadeTail : 0.35 });
+    f.prog = prog;
+  }
+
+  // 需求⑤/②：落点引爆的"结算圈"——半径 = 实际结算半径，停留 GAME_CONFIG.FX.settle.life（默认 0.75s）后淡出，
+  //   配合爆炸特效让玩家看清"这一发到底结算了多大范围"。
+  fxSettle(x, y, color, radius) {
+    // 第三轮修正·需求②（加固）：结算圈坐标非有限时整圈不绘制（同上，杜绝左上角假圈）
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const conf = (GAME_CONFIG.FX && GAME_CONFIG.FX.settle) || {};
+    const r = Math.max(8, radius || 60);
+    const life = (conf.life != null) ? conf.life : 0.8;
+    const c = this._hexNum(color || '#ff8c42');
+    const lw = Math.max(1, (conf.width != null) ? conf.width : 7);
+    const dual = (conf.doubleRing !== false);
+    const g = new PIXI.Graphics();
+    // ②（本轮）：结算圈与预告圈同一套"更粗更亮"风格——外发光 + 填充 + 主圈 + 内圈双环
+    if (conf.glow !== false) {
+      g.circle(0, 0, r + Math.max(1, lw * 0.35)).stroke({
+        width: Math.max(2, (conf.glowWidth != null) ? conf.glowWidth : lw * 1.9),
+        color: c, alpha: (conf.glowAlpha != null) ? conf.glowAlpha : 0.28 });
+    }
+    g.circle(0, 0, r).fill({ color: c, alpha: (conf.fillAlpha != null) ? conf.fillAlpha : 0.24 });
+    g.circle(0, 0, r).stroke({ width: lw, color: c, alpha: (conf.strokeAlpha != null) ? conf.strokeAlpha : 0.98 });
+    if (dual) g.circle(0, 0, Math.max(6, r * 0.62)).stroke({ width: Math.max(2, lw - 3), color: 0xffffff, alpha: 0.5 });
+    g.x = x; g.y = y;
+    this._pushFx(g, { kind: 'mk', life: life,
+      pulseAmp: (conf.pulseAmp != null) ? conf.pulseAmp : 0.1,
+      fadeTail: (conf.fadeTail != null) ? conf.fadeTail : 0.4 });
+  }
+
   // 屏幕横幅（阶段 / 大招提示）：需求1——不再写死世界坐标，也不再占屏幕正中央（避免挡住锁定的人物）。
   // 多条状态文本进入 _bannerQueue 依序展示，条与条之间留 0.3s 的简单时间差；
   // 渲染挂在 hudLayer（不受 viewport/相机位移影响），位置固定屏幕中上区域并随屏幕尺寸走。
@@ -564,6 +997,8 @@ class Renderer {
     for (const q of world.fxQueue.splice(0)) {
       switch (q.type) {
         case 'muzzle': this.fxBurst(q.x, q.y, q.color || '#ffffff', 6, 170, 0.28, q.image); break;
+        // 第 4 条（圆域投弹）：投掷起手——施法者处的光斑 + 环脉冲 + 指向落点的粒子（看清"从哪投、投向哪"）
+        case 'throwCast': this.fxThrowCast(q.x, q.y, q.color || '#8ad2ff', q); break;
         // 命中：碰撞点的小光效——轻微爆点 + 方块碎屑，杜绝全屏光环
         case 'hit':
           this.fxBurst(q.x, q.y, q.color || '#ff9d5c', 5, 190, 0.22);
@@ -577,6 +1012,17 @@ class Renderer {
             this._pushFx(ring, { kind: 'r', grow: 150, life: 0.5 }); }
           break;
         case 'banner': this.fxBanner(q.text || '', q.color || '#ff2d55'); break;
+        // 需求②：落点 / 判定提示圈（持续停留 + 呼吸，不再一闪就没；半径 = 实际判定半径）
+        case 'mark':   this.fxMark(q.x, q.y, q.color, (q.r != null) ? q.r : 60, { life: q.life, lock: !!q.lock, width: q.width, glow: q.glow, doubleRing: q.doubleRing,
+                        // 第 6 条（本轮）：透传多圈数据 —— points（各发落点相对簇中心的偏移）/ ringR（整簇包络半径）
+                        //   与逐发子弹 landing 同一来源；trackRate 与子弹跟随同一吸附速率，圈与落点同步
+                        points: q.points, ringR: q.ringR, trackRate: q.trackRate,
+                        // 第 8 批需求①：single 单圈模式透传（区域轰炸/投弹只画一个范围圈；
+                        //   simple=true 时渲染侧自动关闭外发光/双环/小圈/进度环/卡角）
+                        simple: q.simple, progress: q.progress, doubleRing: q.doubleRing,
+                        trackId: (q.trackId != null) ? q.trackId : null, lead: q.lead }); break;
+        // 需求⑤/⑥：落点引爆的结算圈（半径 = 实际结算半径，停留 settle.life 后淡出）
+        case 'settle': this.fxSettle(q.x, q.y, q.color, q.r || 60); break;
         case 'shake':  this._shakeT = Math.max(this._shakeT || 0, q.dur || 0.3); break;
         // 吃 buff：作用于自身的小脉冲（角色位置局部彩圈 + 上飘粒子，时长加长到肉眼可辨的 ~1s），
         // 并在头顶弹出 buff 名称气泡（1.5~2.5s 分档，强增益/护盾停留更久），不再撑全屏光环
@@ -601,7 +1047,7 @@ class Renderer {
     }
   }
 
-  _updateFx(dt) {
+  _updateFx(dt, world) {
     for (let i = this.fxSprites.length - 1; i >= 0; i--) {
       const f = this.fxSprites[i];
       f.life -= dt;
@@ -629,6 +1075,37 @@ class Renderer {
       } else if (f.kind === 't') {
         s.y -= 26 * dt;
         s.alpha = Math.max(0, Math.min(1, f.life / (f.max * 0.55)));
+      } else if (f.kind === 'mk') {
+        // 需求②：落点/判定指示——外圈半径恒等实际判定半径（不缩放，保持"圈 = 判定范围"），
+        //   呼吸式明暗脉动；最后 fadeTail 秒（缺省 0.35s）淡出，避免"一闪就没"
+        const tEl = f.max - f.life;
+        const amp = (f.pulseAmp != null) ? f.pulseAmp : 0.12;
+        const tail = Math.max(0.01, (f.fadeTail != null) ? f.fadeTail : 0.35);
+        const fade = Math.min(1, f.life / tail);
+        // ②（本轮）：跟随锁定目标的真实位置（含 lead 提前量），圆环锁着目标走而不是钉死在初始瞄准点
+        if (f.trackId != null && world && world.players) {
+          const tg = world.players.get(f.trackId);
+          if (tg && tg.alive) {
+            const px = tg.x + (tg.vx || 0) * (f.lead || 0);
+            const py = tg.y + (tg.vy || 0) * (f.lead || 0);
+            // 第 5 条（本轮）：硬跟随（领域类）= 圆心每帧直接置为施法者位置，零滞后；
+            //   软跟随（落点锁定类）= 按 trackRate 平滑吸附（领域缺省 24 ≈ 每帧 40%）
+            if (f.trackSnap) { s.x = px; s.y = py; }
+            else {
+              const rate = (f.trackRate != null) ? f.trackRate : 12;
+              const k = Math.min(1, Math.max(0, rate * (dt || 0.016)));
+              s.x += (px - s.x) * k;
+              s.y += (py - s.y) * k;
+            }
+          }
+        }
+        s.alpha = fade * ((1 - amp) + amp * Math.sin(tEl * 7.0));
+        // ②（本轮）：内圈收缩进度环——由满半径等比缩到 0.3，直观表示"距落地结算还剩多久"
+        if (f.prog) {
+          const k = 0.3 + 0.7 * Math.max(0, Math.min(1, f.life / f.max));
+          f.prog.scale.set(k);
+          f.prog.alpha = 0.7 * fade;
+        }
       }
       if (f.life <= 0) {
         this.fxLayer.removeChild(s);
@@ -655,6 +1132,7 @@ class Renderer {
     // 移动端视野放宽 2.5 倍（1.55 / 2.5 ≈ 0.62）：屏幕内可见世界范围约为原来的 2.5 倍，
     // 角色不再占满画面，能同时看到自己与场地中央的 Boss；PC 端维持 1.22。
     const z = this._coarse ? 0.62 : 1.22;
+    this._camZ = z;
     this.viewport.scale.set(z);
     const aw = GAME_CONFIG.ARENA.w, ah = GAME_CONFIG.ARENA.h;
     const scr = (this.app && this.app.screen) || { width: aw * z, height: ah * z };
@@ -677,10 +1155,27 @@ class Renderer {
     this._camY = Math.max(minY, Math.min(maxY, this._camY));
   }
 
+  // 需求⑥：把「当前镜头可见的战场区域」写回 world.viewRect，
+  //   供落点投放限制 landingClamp:'view' 使用——落点圆环整体落在屏幕可见的合法区域内，
+  //   不会砸到场外或被四面墙挡住（相机 shake 只影响画面抖动，不影响该判定基准）。
+  _syncViewRect(world) {
+    if (!world || !this.app || !this.app.screen) return;
+    const scr = this.app.screen;
+    const z = this._camZ || 1;
+    const aw = GAME_CONFIG.ARENA.w, ah = GAME_CONFIG.ARENA.h;
+    const x0 = (0 - (this._camX || 0)) / z, x1 = (scr.width - (this._camX || 0)) / z;
+    const y0 = (0 - (this._camY || 0)) / z, y1 = (scr.height - (this._camY || 0)) / z;
+    world.viewRect = {
+      x0: Math.max(0, Math.min(aw, x0)), x1: Math.max(0, Math.min(aw, x1)),
+      y0: Math.max(0, Math.min(ah, y0)), y1: Math.max(0, Math.min(ah, y1)),
+    };
+  }
+
   render(world, local, ui, dt) {
     // 特效事件消费
     this.drainFx(world);
     this._applyCamera(world, local);
+    this._syncViewRect(world);
 
     // 震屏（叠加在相机基准位移上，避免覆盖移动端镜头跟随）
     if (this._shakeT > 0) {
@@ -704,24 +1199,36 @@ class Renderer {
       v.nameText.visible = false;   // 头顶名称/血条已改为左侧成员列表 + 顶部 Boss 条
       v.hpBg.visible = false;
       v.hpBar.visible = false;
+      // 本轮新增（撕裂 DoT）：身上撕裂标识（脉动环 + 层数角标）逐帧同步，无撕裂时自动隐藏
+      this._syncTearMark(v, p);
     }
     [...this.entityViews.keys()].forEach(id => {
       if (!world.players.has(id)) this.removePlayer(id);
     });
 
-    // 子弹：按 shape 分发视觉（圆弹/光束/线条/箭头/三角/菱形/方块/星形/圆环 + 发光/拖尾）
+    // 子弹：按 shape 分发视觉（圆弹/光束/线条/箭头/三角/菱形/方块/星形/圆环/五边形/六边形/
+    //   八边形/十字/月牙/刀刃/尖刺/水滴/胶囊/放射 + 双色 colorB + 发光/拖尾）
     const nowT = performance.now() / 1000;
     for (const [, b] of world.bullets) {
       let v = this.bulletViews.get(b.id);
       if (!v) { this.addBullet(b); v = this.bulletViews.get(b.id); }
       if (!v) continue;
       v.spr.position.set(b.x, b.y);
+      // 第 4 条（圆域投弹）：投掷弹逐帧重绘「抛物线预览 + 已飞轨迹 + 地面影子」（数据同源于 bullet.throw）
+      if (v.throwG) this._drawThrowPath(v, b);
       // 修复：发光外圈(glow)必须跟随子弹本体同步坐标。
       // 此前只同步了 spr，glow 一直停在容器本地 (0,0)，即场地世界原点，形成左上角滞留的大圆斑。
       if (v.glow) v.glow.position.set(b.x, b.y);
+      // 第三轮修正·需求②（跟随同步）：结算圈钉在「落点」而不是「子弹」上，必须逐帧同步 ——
+      //   落点会随"簇中心向锁定目标靠拢"被更新（landing.x / landing.y 每帧可能变化），
+      //   旧实现只在创建那一帧算一次位置，圈既错位又不会跟着落点走。这里与 spr / glow 同一约定写世界坐标。
+      if (v.landG && b.landing && Number.isFinite(b.landing.x) && Number.isFinite(b.landing.y)) {
+        v.landG.position.set(b.landing.x, b.landing.y);
+      }
       const cfg = b.cfg || {};
-      // 旋转：自旋(spin, 弧度/秒) > 朝向飞行方向(dirShape) > 静态角(rot, 一次)
+      // 旋转：自旋(spin, 弧度/秒) > 环绕(orbit.spin, 需求6 旋转子弹观感) > 朝向飞行方向(dirShape) > 静态角(rot, 一次)
       if (cfg.spin) v.spr.rotation = (v.spr.rotation || 0) + (cfg.spin || 0) * (dt || 0.016);
+      else if (b.orbit && b.orbit.spin) v.spr.rotation = (v.spr.rotation || 0) + b.orbit.spin * 0.45 * (dt || 0.016);
       else if (v.dirShape && (b.vx || b.vy)) v.spr.rotation = Math.atan2(b.vy, b.vx);
       else if (cfg.rot && !v.rotSet) { v.spr.rotation = cfg.rot; v.rotSet = true; }
       // 弹道拖尾（cfg.trail 可配：true=默认 0.045s 一颗；number=生成间隔秒）
@@ -729,7 +1236,7 @@ class Renderer {
         const interval = (typeof cfg.trail === 'number' && cfg.trail > 0) ? cfg.trail : 0.045;
         if (nowT - (v.lastTrail || 0) >= interval) {
           v.lastTrail = nowT;
-          this._spawnTrail(b, cfg.trailColor || cfg.color || '#ffffff', cfg.trailSize);
+          this._spawnTrail(b, cfg.trailColor || b.color || cfg.color || '#ffffff', cfg.trailSize);
         }
       }
     }
@@ -751,7 +1258,7 @@ class Renderer {
     this.overlay.visible = false;
 
     // 特效
-    if (dt) this._updateFx(dt);
+    if (dt) this._updateFx(dt, world);
     // 需求1：中央横幅队列消费（挂 hudLayer，屏幕正中央、带时间差）
     if (dt) this._tickBanners(dt);
   }

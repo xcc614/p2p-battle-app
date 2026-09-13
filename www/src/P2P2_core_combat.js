@@ -9,7 +9,7 @@
 //   7. 战斗统计（击杀数、造成伤害）
 // 纯配置（config/*.json）+ 纯函数，world.js 只调用本模块接口，不硬编码伤害逻辑。
 //
-// 条件判断：所有模块节点可带 condition（见 src/conditions.js），
+// 条件判断：所有模块节点可带 condition（见 src/P2P2_core_conditions.js），
 // 不满足条件的节点整棵子树不生效；技能带 condition 则未满足前不可释放。
 
 // 技能栏配置读取（config/skillbar.json → window.SKILLBAR）：

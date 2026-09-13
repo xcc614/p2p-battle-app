@@ -35,7 +35,14 @@ class Bullet {
     this.speedMul = speedMul || 1;
     this.vx = ux * this.cfg.speed * this.speedMul;
     this.vy = uy * this.cfg.speed * this.speedMul;
-    this.radius = this.cfg.radius;
+    this.radius = (opts.radius != null && opts.radius > 0) ? opts.radius : this.cfg.radius;
+    // 需求9：形状 / 颜色扩展——释放事件或技能配置可直接覆盖弹型默认值（更多形状、多颜色子弹）
+    this.shape = opts.shape || this.cfg.shape || 'circle';
+    this.color = opts.color || this.cfg.color || '#ffffff';
+    this.colorB = opts.colorB || this.cfg.colorB || null;     // 第二色（内芯/高光），渲染层做双色处理
+    // 本轮新增（撕裂 DoT）：技能级 tear 配置随释放事件下发（world.spawnSkillBullets → commonOpts），
+    //   子弹只负责原样携带并在命中载荷中带出，不做任何结算——结算统一在房主 handleHit 权威入口完成。
+    this.tear = (opts.tear && typeof opts.tear === 'object') ? opts.tear : null;
     this.dmgMul = opts.dmgMul || 1;                 // 蓄力炮等释放方式的伤害倍率
     // —— 攻击属性接线（方案 A）——
     // 伤害 = 弹型基础 damage（bullets.json）× 释放方式倍率 dmgMul × 攻击者运行时 damageMul
@@ -49,8 +56,9 @@ class Bullet {
       : Math.max(1, Math.round(this.castDamage));
     this.critChance = (at && at.critChance) || 0;    // 暴击率（攻击者合成属性，装备/宝石/铭文/追加提供）
     this.critMul = (at && at.critMul) || 1.5;        // 暴击倍率
-    this.life = this.cfg.life;
-    this.life0 = this.cfg.life;
+    // 需求5/6：存续时间可由释放事件覆盖（近战弹短存续、环绕弹按 orbitLife 控制时长）
+    this.life = (opts.life != null && opts.life > 0) ? opts.life : this.cfg.life;
+    this.life0 = this.life;
     this.pierce = this.cfg.pierce;
     this.hitIds = new Set();   // 已命中目标，防重复
     this.dead = false;
@@ -69,6 +77,74 @@ class Bullet {
     this.homingRate = (opts.homing != null) ? opts.homing : this.mo.homing;
     // 释放方式注入的爆炸半径（区域轰炸等）：覆盖弹型自带 explodeRadius（未注入为 null，走弹型配置）
     this.blastR = (opts.blastRadius != null && opts.blastRadius > 0) ? opts.blastRadius : null;
+    // —— 需求11/⑥：区域落点（子弹从屏幕上方下落，进入圆形结算区域即结束并结算，不再无限下落）——
+    //   landing = { x, y, r }：由 world 写入世界坐标并随释放事件广播，各端结算区域一致；
+    //   渲染层的「落点圆环」与结算伤害共用这同一份 landing，故两者圆心/半径天然完全对齐。
+    //   trackId/lead（本轮新增·需求⑥）：落点锁定目标后，飞行途中每帧向目标真实位置平滑靠拢，
+    //   并按 lead 秒提前量预判，实现「锁 Boss 时圆环跟随其真实位置」。
+    this.landing = (opts.landing && typeof opts.landing === 'object')
+      ? { x: opts.landing.x, y: opts.landing.y, r: Math.max(8, opts.landing.r || 60),
+          trackId: (opts.landing.trackId != null) ? opts.landing.trackId : null,
+          lead: (opts.landing.lead != null) ? opts.landing.lead : 0,
+          // 需求⑥：落点夹取模式（'view' = 跟随途中也限制在镜头可见区内，避免圆环被目标带出屏幕）
+          clamp: (opts.landing.clamp === 'view') ? 'view' : null,
+          trackRate: (opts.landing.trackRate != null) ? opts.landing.trackRate : 16,
+          // 第 6 条（本轮）：相对「落点簇中心」的固定偏移——飞行途中改由「簇中心 + 偏移」同步平移，
+          //   与预告圈（渲染侧 points 使用同一份偏移）完全同源，逐发之间不会各走各的；
+          //   centerInset = 簇中心夹取内缩（簇半径 + 结算半径 + 离墙留白），wallInset = 离墙留白。
+          offX: (opts.landing.offX != null) ? opts.landing.offX : 0,
+          offY: (opts.landing.offY != null) ? opts.landing.offY : 0,
+          centerInset: (opts.landing.centerInset != null) ? opts.landing.centerInset : null,
+          wallInset: (opts.landing.wallInset != null) ? opts.landing.wallInset : null,
+          center: null,   // 运行时簇中心（惰性初始化 = 落点 - 偏移；各发同一初值 + 同一速率 → 严格同步）
+          // 需求②（本轮）：落点圆环的线宽 / 发光开关随技能级配置下发（缺省回退 FX.landing）
+          width: (opts.landing.width != null) ? opts.landing.width : null,
+          glow: (opts.landing.glow != null) ? !!opts.landing.glow : null }
+      : null;
+    this.landingHit = false;
+    // 需求⑥/⑤：天降 / 投掷类弹体飞行途中不做身体命中判定，伤害统一由落点结算圈给出
+    //   （否则会出现「半空蹭到人」的额外伤害，与「落点圈 = 结算区」的承诺不符）
+    this.noBodyHit = (opts.noBodyHit === true);
+    // —— 需求⑤：圆域投弹的「投掷动作」——从施法者抛向落点的抛物线飞行 ——
+    //   throw = { x0,y0 出手点, tx,ty 目标点, dur 飞行时长(秒), peak 抛物高度(px) }
+    //   飞满 dur 后视为抵达：置 landingHit/dead，由 world 在落点结算圈内统一结算伤害
+    this.throw = (opts.throw && typeof opts.throw === 'object')
+      ? { x0: opts.throw.x0, y0: opts.throw.y0, tx: opts.throw.tx, ty: opts.throw.ty,
+          dur: Math.max(0.12, opts.throw.dur || 0.55),
+          peak: Math.max(0, (opts.throw.peak != null) ? opts.throw.peak : 90),
+          t: 0, done: false } : null;
+    // —— 需求6/④：环绕子弹（围绕玩家旋转；位置由角度直接求得，不参与常规弹道/撞墙积分）——
+    //   radius 允许为 0（领域类子弹圆心锚定玩家，需求③）
+    //   persist (缺省 true) 持续环绕不清空：不吃生命周期，直到角色死亡/复活、技能被替换或显式清除
+    //                        （keep 为历史别名，等价）
+    //   block (缺省 true)  可抵挡/抵消来袭子弹；blocks 可格挡次数；refill 冷却后回复次数；rehit 冷却秒
+    //   consume(缺省 false) 拦截成功后是否消耗（消亡）该发飞刃
+    // persist 缺省 true（未显式关闭即持续环绕）；keep 为历史别名，二者等价
+    const _orbCfg = (opts.orbit && typeof opts.orbit === 'object') ? opts.orbit : null;
+    const opersist = _orbCfg
+      ? ((_orbCfg.persist != null) ? (_orbCfg.persist !== false) : (_orbCfg.keep !== false))
+      : true;
+    this.orbit = (opts.orbit && typeof opts.orbit === 'object')
+      ? {
+        radius: Math.max(0, (opts.orbit.radius != null) ? opts.orbit.radius : 70),
+        spin: (opts.orbit.spin != null) ? opts.orbit.spin : 2.4,        // 角速度（弧度/秒，负值反向）
+        phase: (opts.orbit.phase != null) ? opts.orbit.phase : 0,       // 初始相位（弧度）
+        follow: (opts.orbit.follow !== false),                          // 是否跟随玩家移动
+        persist: opersist,
+        keep: opersist,                                                 // 历史别名（兼容旧配置/旧调用）
+        block: (opts.orbit.block !== false),
+        blocks: Math.max(0, (opts.orbit.blocks != null) ? opts.orbit.blocks : 1),
+        refill: (opts.orbit.refill !== false),
+        rehit: Math.max(0, (opts.orbit.rehit != null) ? opts.orbit.rehit : 0.6),
+        consume: (opts.orbit.consume === true),
+      } : null;
+    this._orbA = this.orbit ? this.orbit.phase : 0;
+    // 不跟随（follow:false）时的锚点 = 生成位置。此前该字段从未赋值，
+    //   一旦配置 follow:false 就会取到 undefined，圆心变 NaN、子弹整帧消失——本轮补上。
+    this._orbCx = x; this._orbCy = y;
+    this.orbitBlocksLeft = this.orbit ? this.orbit.blocks : 0;    // 剩余格挡次数
+    this.orbitBlockCd = 0;                                        // 格挡冷却计时
+    this.orbitHits = 0;                                           // 累计抵消数（调试/表现用）
     this.splitReq = false;
     this._splitDone = false;
   }
@@ -130,15 +206,42 @@ class Bullet {
     };
   }
 
-  update(dt, arena, enemies) {
+  update(dt, arena, enemies, owner) {
     // 已消亡（本帧命中判定置 dead，等 world 下一帧回收）：不再位移，仅保留坐标供分裂/渲染取点
     if (this.dead) { this.prevX = this.x; this.prevY = this.y; return; }
     this.age += dt;
-    this.life -= dt;
+    // 需求④：环绕飞刃 persist=true（缺省，keep 历史别名等价）不吃生命周期——
+    //   持续绕角色旋转，直到角色死亡/复活、该技能被替换或被显式清除
+    // 本轮修复（第 3 条·清空路径④）：持久环绕弹不仅不吃 life 衰减，还补一道初始值护栏——
+    //   若 orbit.life 未配 / 配成 0 或负数，旧写法会立刻命中下方 this.life <= 0 而当场消亡，
+    //   表现为"飞刃刚放出来就没了"。这里对持久环绕弹强制给出正的生命基数（仅作兜底，不影响非持久弹）。
+    const _persistOrbit = !!(this.orbit && (this.orbit.persist || this.orbit.keep));
+    if (_persistOrbit) { if (!(this.life > 0)) this.life = 1; } else { this.life -= dt; }
     if (this.life <= 0) { this.dead = true; return; }
     this.prevX = this.x; this.prevY = this.y;
+    // 需求⑤：投掷飞行（抛物线：出手点 → 落点，飞满 dur 秒抵达并引爆）
+    //   投掷期间不参与常规弹道 / 撞墙 / 落点判定，抵达后用 landing 走统一结算通道
+    if (this.throw && !this.throw.done) {
+      const th = this.throw;
+      th.t += dt;
+      const p = Math.max(0, Math.min(1, th.t / th.dur));
+      this.x = th.x0 + (th.tx - th.x0) * p;
+      this.y = th.y0 + (th.ty - th.y0) * p - th.peak * Math.sin(Math.PI * p);
+      if (dt > 0) { this.vx = (this.x - this.prevX) / dt; this.vy = (this.y - this.prevY) / dt; }
+      if (p >= 1) {
+        th.done = true;
+        this.x = th.tx; this.y = th.ty;
+        if (this.landing) { this.landing.x = th.tx; this.landing.y = th.ty; }
+        this.landingHit = true;                       // 抵达落点 → world._settleLanding 结算
+        this.dead = true;
+      }
+      return;
+    }
     // 弹道运动（配置驱动，见 config/bullets.json motion 字段；参数已在构造时归一化）
     const m = this.mo;
+    // 需求6：环绕子弹——围绕玩家旋转（位置由角度直接求得，不走下方位移积分）
+    if (this.orbit) this._updateOrbit(dt, owner);
+    if (!this.orbit) {
     {
       const sp = Math.hypot(this.vx, this.vy) || 1;
       if (m.drag) {
@@ -237,6 +340,42 @@ class Bullet {
       this.x += this.vx * dt;
       this.y += this.vy * dt;
     }
+    }   // ← 环绕子弹分支结束（其位置在 _updateOrbit 中直接求得）
+
+    // 需求⑥ + 第 6 条（本轮）：落点锁定——飞行途中**簇中心**向目标真实位置平滑靠拢（带 lead 秒提前量），
+    //   逐发落点 = 簇中心 + 固定偏移（offX/offY），因此「预告圈（同一份偏移）」与「结算圈」几何严格一致；
+    //   各发共用同一初值与同一吸附速率（确定性），不会出现"圈跑得快、弹落得慢"的错位。
+    //   限制：簇中心按 centerInset（簇半径 + 结算半径 + 离墙留白）夹在战场合法区域内，不贴墙/不出界。
+    if (this.landing && !this.landingHit && this.landing.trackId != null && enemies && enemies.length) {
+      const tg = enemies.find(e => e && e.id === this.landing.trackId && e.alive !== false);
+      if (tg) {
+        const L = this.landing;
+        const c = L.center || (L.center = { x: L.x - (L.offX || 0), y: L.y - (L.offY || 0) });
+        const px = tg.x + (tg.vx || 0) * (L.lead || 0);
+        const py = tg.y + (tg.vy || 0) * (L.lead || 0);
+        const k = Math.min(1, Math.max(0, (L.trackRate || 16) * dt));
+        c.x += (px - c.x) * k;
+        c.y += (py - c.y) * k;
+        const ar = arena || GAME_CONFIG.ARENA;
+        const ins = Math.max(L.r, (L.centerInset != null) ? L.centerInset : (L.r + Math.max(0, L.wallInset || 0)));
+        const mx = (ar.w - ins < ins) ? ar.w / 2 : ins;
+        const my = (ar.h - ins < ins) ? ar.h / 2 : ins;
+        c.x = Math.max(mx, Math.min(ar.w - mx, c.x));
+        c.y = Math.max(my, Math.min(ar.h - my, c.y));
+        L.x = c.x + (L.offX || 0);
+        L.y = c.y + (L.offY || 0);
+      }
+    }
+
+    // 需求11：区域落点——圆形结算区域（子弹从上方下落，进入结算圈或越过落点水平线即结束，不再无限下落）
+    //   结算伤害由 world._settleLanding 统一处理（房主权威），此处只负责"结束飞行"的判定
+    if (this.landing && !this.landingHit) {
+      const L = this.landing;
+      const rr = L.r + this.radius;
+      const dx = this.x - L.x, dy = this.y - L.y;
+      const crossed = (this.prevY <= L.y && this.y >= L.y);   // 高速下落兜底：越过落点水平线
+      if (dx * dx + dy * dy <= rr * rr || crossed) { this.landingHit = true; this.dead = true; }
+    }
 
     // 分裂请求：进度达到 at（默认 0.4）且未超出层级上限时置标记，由 world 生成子弹
     if (m.split && !this._splitDone) {
@@ -244,8 +383,8 @@ class Bullet {
       const prog = this.life0 > 0 ? 1 - this.life / this.life0 : 1;
       if (prog >= at && this.depth < m.split.maxDepth) { this._splitDone = true; this.splitReq = true; }
     }
-    // 撞墙
-    if (this.cfg.onWall !== 'ignore') {
+    // 撞墙（环绕子弹锚定玩家，不做撞墙处理）
+    if (!this.orbit && this.cfg.onWall !== 'ignore') {
       const orbit = this.spiral.orbit;      // 环绕螺旋的速度由位置差分得出，撞墙改为翻转基准线方向
       let hit = false;
       if (this.x - this.radius < 0) { this.x = this.radius; if (!orbit) this.vx = -this.vx; hit = true; }
@@ -264,6 +403,27 @@ class Bullet {
         // 'bounce' 则继续飞行（已反转速度）
       }
     }
+  }
+
+  // 需求6：环绕子弹——围绕玩家做圆周旋转（角度直接积分，不参与常规弹道/撞墙积分）
+  //   follow:true（缺省）跟随玩家移动；owner 缺失时锚点固定在生成位置，保证各端表现一致
+  // 第 5 条（本轮）：领域/环绕类"锚定玩家"加固——owner 在场时记录其最后已知位置，
+  //   owner 瞬时缺失（尚未同步到本端 / 已离场）时沿用该位置，而不是回跳生成点，
+  //   消除"领域忽然弹回施法原点"的观感（生成点仅在从未拿到过 owner 时使用）。
+  _updateOrbit(dt, owner) {
+    const o = this.orbit;
+    const canFollow = !!o.follow;
+    if (canFollow && owner) { this._orbLastX = owner.x; this._orbLastY = owner.y; }
+    const cx = (canFollow && owner) ? owner.x
+      : ((canFollow && this._orbLastX != null) ? this._orbLastX : this._orbCx);
+    const cy = (canFollow && owner) ? owner.y
+      : ((canFollow && this._orbLastY != null) ? this._orbLastY : this._orbCy);
+    this._orbA += o.spin * dt;
+    const a = this._orbA;
+    this.x = cx + Math.cos(a) * o.radius;
+    this.y = cy + Math.sin(a) * o.radius;
+    // 速度按位置差分还原：供朝向渲染与命中判定使用
+    if (dt > 0) { this.vx = (this.x - this.prevX) / dt; this.vy = (this.y - this.prevY) / dt; }
   }
 
   // 碰撞判定：扫掠线段对圆（高速弹不穿透），beam 无视间距按当前点判
@@ -319,7 +479,8 @@ class Bullet {
       : { dmg: this.damage, crit: false };
   }
 
-  // 命中处理：返回 { hit:true, explode:bool, wallBoom:bool, damage, crit } 或 null（未命中）
+  // 命中处理：返回 { hit:true, explode:bool, wallBoom:bool, damage, crit, tear } 或 null（未命中）
+  //   tear（本轮新增）：技能级撕裂配置随命中载荷带出，交由 world.handleHit → _applyTear 应用 DoT。
   hit(target) {
     this.hitIds.add(target.id);
     this._requestSplitOnHit();
@@ -327,13 +488,13 @@ class Bullet {
     if (this.cfg.onHit === 'explode' || this._wallBoom || this.blastR != null) {
       this.dead = true;
       const er = (this.blastR != null) ? this.blastR : this.cfg.explodeRadius;
-      return { hit: true, explode: true, damage: roll.dmg, crit: roll.crit, explodeRadius: er };
+      return { hit: true, explode: true, damage: roll.dmg, crit: roll.crit, explodeRadius: er, tear: this.tear };
     }
     if (this.pierce > 0) {
       this.pierce--;
-      return { hit: true, explode: false, damage: roll.dmg, crit: roll.crit };
+      return { hit: true, explode: false, damage: roll.dmg, crit: roll.crit, tear: this.tear };
     }
     this.dead = true;
-    return { hit: true, explode: false, damage: roll.dmg, crit: roll.crit };
+    return { hit: true, explode: false, damage: roll.dmg, crit: roll.crit, tear: this.tear };
   }
 }

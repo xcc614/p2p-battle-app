@@ -18,7 +18,7 @@
         <span>本地局域网</span>
       </label>
       <!-- 唯一配置入口：联机对战与单人离线挑战共用同一份配置，取代原房间面板 / 单人区的两个按钮 -->
-      <!-- title 里的模块名清单由 src/main.js 的 syncCfgModuleNames() 按 config/modules.json 声明的 name 运行时拼接 -->
+      <!-- title 里的模块名清单由 src/P2P2_app_main.js 的 syncCfgModuleNames() 按 config/modules.json 声明的 name 运行时拼接 -->
       <button id="btnConfig" type="button" class="btn ghost ident-cfg" title="模块化配置（联机与单人共用同一份，联机会同步到房间）">配置</button>
     </div>
 
@@ -26,10 +26,10 @@
     <div class="quick-zone">
       <div class="quick-title">提前组房间 · 快速开始</div>
       <div class="quick-row">
-        <input id="quickTok" type="text" maxlength="4096" placeholder="留空 = 创建房间；粘贴朋友发的 M2P/房间码 = 加入房间">
+        <input id="quickTok" type="text" maxlength="4096" placeholder="留空 = 创建房间（勾选局域网=手动房；取消勾选=直连信令服务器自动进房）；粘贴 M2P/房间码 = 加入">
         <button id="btnQuickGo" type="button" class="btn primary" style="flex:0 0 150px">创建 / 加入</button>
       </div>
-      <p class="hint quick-tip" id="quickTip">留空点按钮 = 创建房间（按「本地局域网」勾选分流）；粘贴朋友发来的码点按钮 = 加入对应房间。</p>
+      <p class="hint quick-tip" id="quickTip">留空点按钮 = 创建房间（勾选「本地局域网」为手动贴码房；取消勾选则直接连信令服务器进房，房间码可留空）；粘贴朋友发来的码点按钮 = 加入对应房间。</p>
     </div>
 
     <div class="layout">
@@ -62,7 +62,7 @@
           <div id="rpAiRow" class="rp-ai" style="display:none">
             <div class="row tight ai-line">
               <span class="hint">AI 角色：</span>
-              <!-- 数量档位上限与标题称谓由 src/main.js 运行时生成（ROOM_MAX 推算上限；称谓读 units.json 的 _aiNames） -->
+              <!-- 数量档位上限与标题称谓由 src/P2P2_app_main.js 运行时生成（ROOM_MAX 推算上限；称谓读 units.json 的 _aiNames） -->
               <select id="rpAiCount" title="AI 数量"></select>
               <select id="rpAiLevel" title="AI 难度"></select>
               <label class="check" title="额外生成一个 AI Boss（有人类 Boss 时自动失效）"><input type="checkbox" id="rpAiBoss" checked><span>AI Boss</span></label>
@@ -86,29 +86,29 @@
         <div class="challenge-box">
           <div class="row tight">
             <select id="soloOpp">
-              <!-- 选项文案由 src/main.js 的 syncSoloOppText() 按配置生成（单位名 + units.json 的 _aiNames 称谓） -->
+              <!-- 选项文案由 src/P2P2_app_main.js 的 syncSoloOppText() 按配置生成（单位名 + units.json 的 _aiNames 称谓） -->
               <option value="boss">挑战 AI Boss</option>
               <option value="team">挑战 AI 队</option>
             </select>
           </div>
           <div class="row tight">
-            <!-- 难度档位由 src/main.js 按 config/ai.json 的档位数量动态填充（默认选中项取 config/challenge.json 的 aiLevel） -->
+            <!-- 难度档位由 src/P2P2_app_main.js 按 config/ai.json 的档位数量动态填充（默认选中项取 config/challenge.json 的 aiLevel） -->
             <select id="soloDiff" title="AI 难度"></select>
           </div>
           <div class="row tight">
-            <!-- 单位名与「（默认）」标记由 src/main.js 的 populateUnitSelectors() 按 config 动态填充 -->
+            <!-- 单位名与「（默认）」标记由 src/P2P2_app_main.js 的 populateUnitSelectors() 按 config 动态填充 -->
             <select id="soloUnit">
               <option value="hero">你（默认）</option>
             </select>
           </div>
           <div class="row tight">
-            <!-- 选项文案（单位名 + 默认标记）由 src/main.js 的 populateUnitSelectors() 按 config 动态填充 -->
+            <!-- 选项文案（单位名 + 默认标记）由 src/P2P2_app_main.js 的 populateUnitSelectors() 按 config 动态填充 -->
             <select id="soloBoss">
               <option value="demon_lord">敌方 Boss（默认）</option>
             </select>
           </div>
           <div class="row tight" id="alliesRow">
-            <!-- AI 队友数量档位由 src/main.js 按 config/runtime.json 的 ROOM_MAX 推算上限后动态填充（标题称谓读 units.json 的 _aiNames） -->
+            <!-- AI 队友数量档位由 src/P2P2_app_main.js 按 config/runtime.json 的 ROOM_MAX 推算上限后动态填充（标题称谓读 units.json 的 _aiNames） -->
             <select id="soloAllies" title="AI 数量"></select>
           </div>
           <button id="btnChallenge" class="btn challenge">开始单人游戏</button>
@@ -225,7 +225,7 @@
   <div id="panelCfg" class="bp-overlay" style="display:none">
     <div class="bp-card cfg-card">
       <div class="bp-title">配置</div>
-      <div class="bp-sub">上方页签切换模块（装备 / 宝石 / 铭文 / 技能…），左侧候选池按分组折叠，把候选拖进右侧格子即装载（也可直接点候选自动补位）；格子上的 × 卸下，把候选拖到已占用格子即替换。每个分组有独立槽位上限，模块总装载不超过上限（技能最多 <span id="cfgSkillMaxSlots">8</span> 个，数值取自 config/modules.json 技能模块 maxSlots）。</div>
+      <div class="bp-sub">上方页签切换模块（装备 / 宝石 / 铭文 / 技能…），左侧候选池按分组折叠，把候选拖进右侧格子即装载（也可单击候选自动补位，再单击同一条候选即取消装载）；格子上的 × 卸下，把候选拖到已占用格子即替换。左侧候选池与右侧格子区各自独立滚动，滚动候选池不影响右侧。每个分组有独立槽位上限，模块总装载不超过上限（技能最多 <span id="cfgSkillMaxSlots">8</span> 个，数值取自 config/modules.json 技能模块 maxSlots）。</div>
       <div class="cfg-profile">
         <label class="cfg-prof-label" for="cfgProfile">装配来源</label>
         <select id="cfgProfile"></select>
@@ -234,7 +234,7 @@
       <div id="cfgTabs" class="cfg-tabs"></div>
       <div class="cfg-main">
         <div class="cfg-col cfg-pool-wrap">
-          <div class="cfg-col-h">候选池</div>
+          <div class="cfg-col-h">候选池（单击装载 / 再单击同一条取消）</div>
           <div id="cfgPool" class="cfg-pool"></div>
         </div>
         <div class="cfg-col cfg-grid-wrap">
@@ -274,7 +274,7 @@
       var on = !lan || lan.checked;
       tip.innerHTML = on
         ? '留空点按钮 = 创建<strong>本地局域网房间</strong>（0 服务器手动贴码，无需房间码）；粘贴朋友发来的 M2P 码 = 加入。取消「本地局域网」后此框改为创建 / 加入令牌服务器在线房间。'
-        : '留空点按钮 = 创建<strong>令牌服务器在线房间</strong>（自动生成房间码 / 令牌）；粘贴朋友发来的房间码 / 令牌 = 加入对应房间。';
+        : '留空点按钮 = 直接连<strong>信令服务器</strong>进房（房间码可留空：服务端自动匹配可用房间，无可用则新建，进房后房内成员自动互换信令）；粘贴朋友发来的房间码 / 令牌 = 加入对应房间。';
     }
     // 「本地局域网」勾选：令牌服务器配置整块禁用/启用（常驻显示，不做隐藏跳变）
     function updateLanState() {
@@ -285,7 +285,7 @@
       var tip = document.getElementById('sigTip');
       if (host) host.disabled = on;
       if (st) st.textContent = on ? '已勾选「本地局域网」：此配置禁用，创建/加入走 0 服务器手动贴码' : '已取消「本地局域网」：可配置令牌服务器地址，创建/加入走在线房间';
-      if (tip) tip.textContent = on ? '当前已勾选「本地局域网」：创建/加入均走 0 服务器手动贴码，此配置禁用。取消勾选后这里才会启用。' : '当前未勾选「本地局域网」：创建/加入走令牌服务器在线房间（成员需能访问同一服务器）。留空使用默认地址。';
+      if (tip) tip.textContent = on ? '当前已勾选「本地局域网」：创建/加入均走 0 服务器手动贴码，此配置禁用。取消勾选后这里才会启用。' : '当前未勾选「本地局域网」：创建/加入走令牌服务器在线房间（成员需能访问同一服务器）。房间码留空点按钮 = 直连服务器进房（自动匹配可用房间，无可用则新建）；此处留空则用默认地址。';
     }
     // 局域网勾选变化：若房间已创建（大厅/对局中）不允许切换，需先退出房间
     function onLanToggle(chk) {
@@ -310,7 +310,7 @@
        本地/离线调试自动回退 lib/pixi.min.js；玩法数据全部走 config/*.json（loadGameConfig 启动载入） -->
   <script>
     (function () {
-      var SRC = ['src/config_loader.js', 'src/conditions.js', 'src/combat.js', 'src/profiles.js', 'src/triggers.js', 'src/buffs.js', 'src/feed.js', 'src/assets.js', 'src/input.js', 'src/touch.js', 'src/player.js', 'src/bullet.js', 'src/token.js', 'src/net.js', 'src/world.js', 'src/boss.js', 'src/bot.js', 'src/render.js', 'src/main.js'];
+      var SRC = ['src/P2P2_config_loader.js', 'src/P2P2_core_conditions.js', 'src/P2P2_core_combat.js', 'src/P2P2_core_profiles.js', 'src/P2P2_core_triggers.js', 'src/P2P2_core_token.js', 'src/P2P2_battle_buffs.js', 'src/P2P2_battle_cast.js', 'src/P2P2_battle_player.js', 'src/P2P2_battle_bullet.js', 'src/P2P2_battle_world.js', 'src/P2P2_battle_boss.js', 'src/P2P2_battle_bot.js', 'src/P2P2_net_transport.js', 'src/P2P2_view_assets.js', 'src/P2P2_view_render.js', 'src/P2P2_ui_feed.js', 'src/P2P2_ui_cast.js', 'src/P2P2_input_keyboard.js', 'src/P2P2_input_touch.js', 'src/P2P2_app_main.js'];
       var CDN = 'https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js';
       var CDN2 = 'https://unpkg.com/pixi.js@8/dist/pixi.min.js';
       var LOCAL = 'lib/pixi.min.js';
@@ -319,7 +319,8 @@
       var LOCAL_VER = Date.now();
       (function () {   // 样式同理：追加带版本串的新 link（后加载者优先，覆盖同名的旧缓存样式）
         // feed.css：中上纵向滚动提示区（FxFeed）样式
-        ['style.css', 'feed.css'].forEach(function (css) {
+        // cast.css：屏幕中下强力读条 + 禁咒打点 / 吟唱描摹浮层（src/P2P2_ui_cast.js）样式
+        ['style.css', 'feed.css', 'cast.css'].forEach(function (css) {
           var l = document.createElement('link');
           l.rel = 'stylesheet';
           l.href = css + '?v=' + LOCAL_VER;

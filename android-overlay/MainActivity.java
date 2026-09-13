@@ -10,7 +10,10 @@
  *        页面内的 fetch / WebSocket / 相对路径资源全部落到本机内置服务；
  *      · ?lan= 参数把真实局域网地址交给 landing 页，用于生成「其他手机扫码」的二维码；
  *   4) 每次页面开始加载 / 加载完成时注入 window.__LAN_BASE__ 与 window.__SIGNAL_BASE__（双保险，
- *      ?lan= 为确定性通道，注入为补充；两者格式与前端解析逻辑一致）。
+ *      ?lan= 为确定性通道，注入为补充；两者格式与前端解析逻辑一致）；
+ *   5) 沉浸式满屏：隐藏系统状态栏与导航栏，WebView 铺满整屏（内容延伸至刘海/挖孔区）。
+ *      仅控制「系统栏显隐」，不锁屏幕方向 —— 横竖屏与页面布局完全由 HTML / CSS 自行决定，
+ *      原生侧不调用 setRequestedOrientation，页面也不会因旋转重建 Activity。
  *
  * 与 Capacitor 的关系：
  *   - 继承 BridgeActivity 复用模板创建的 WebView（getBridge().getWebView()）；取不到时退回遍历视图树
@@ -44,6 +47,9 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceRequest;
@@ -118,6 +124,8 @@ public class MainActivity extends BridgeActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         buildOverlay();
         requestNotificationPermission();
+        // 沉浸式满屏：隐藏系统状态栏 / 导航栏（不涉及页面方向）
+        applyImmersiveFullscreen();
         // 便于 chrome://inspect 调试内置页面（仅调试用途，不影响功能）
         try {
             WebView.setWebContentsDebuggingEnabled(true);
@@ -162,6 +170,90 @@ public class MainActivity extends BridgeActivity {
         handler.removeCallbacks(pollTask);
         handler.removeCallbacks(loadTimeoutTask);
         super.onDestroy();
+    }
+
+    // ==================================================================
+    // 沉浸式满屏（只控制系统栏显隐，不干预页面方向）
+    // ==================================================================
+
+    /**
+     * 隐藏系统状态栏与导航栏，让 WebView 铺满整屏。
+     *
+     * 说明：
+     *   · 只改「系统栏显隐」与窗口布局策略，不调用 setRequestedOrientation —— 横竖屏与页面
+     *     布局完全交给 HTML / CSS；
+     *   · API 30+ 用 WindowInsetsController，低版本用 SYSTEM_UI_FLAG_IMMERSIVE_STICKY；
+     *   · 采用 STICKY / BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE：用户从边缘下滑可临时唤出系统栏，
+     *     松手后自动隐藏，不会常驻占位；
+     *   · API 28+ 允许内容延伸到刘海 / 挖孔区（页面侧可用 env(safe-area-inset-*) 自行避让）。
+     */
+    @SuppressWarnings("deprecation")
+    private void applyImmersiveFullscreen() {
+        try {
+            Window window = getWindow();
+            if (window == null) {
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= 28) {
+                WindowManager.LayoutParams lp = window.getAttributes();
+                lp.layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                window.setAttributes(lp);
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                window.setDecorFitsSystemWindows(false);
+                WindowInsetsController controller = window.getInsetsController();
+                if (controller != null) {
+                    controller.hide(WindowInsets.Type.systemBars());
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
+            } else {
+                View decor = window.getDecorView();
+                decor.setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "applyImmersiveFullscreen failed: " + t);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // 系统栏被临时唤出 / 被弹窗打断后，重新获得焦点时恢复满屏
+        if (hasFocus) {
+            applyImmersiveFullscreen();
+            notifyViewportChanged(300L);
+        }
+    }
+
+    /** 系统栏显隐会改变 WebView 可视尺寸：补发一次 resize，让页面（fitCanvas）重算画布 */
+    private void notifyViewportChanged(long delayMs) {
+        final WebView view = webView;
+        if (view == null) {
+            return;
+        }
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    view.evaluateJavascript("window.dispatchEvent(new Event('resize'));", null);
+                } catch (Throwable t) {
+                    Log.w(TAG, "notifyViewportChanged failed: " + t);
+                }
+            }
+        };
+        if (delayMs > 0) {
+            handler.postDelayed(task, delayMs);
+        } else {
+            handler.post(task);
+        }
     }
 
     private final ServiceConnection connection = new ServiceConnection() {
@@ -408,6 +500,9 @@ public class MainActivity extends BridgeActivity {
         pageShown = true;
         handler.removeCallbacks(loadTimeoutTask);
         hideOverlay();
+        // 页面就绪后再确认一次满屏，并让页面按实际可视尺寸重算画布
+        applyImmersiveFullscreen();
+        notifyViewportChanged(300L);
         if (webView != null) {
             webView.requestFocus();
         }

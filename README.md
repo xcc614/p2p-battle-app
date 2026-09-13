@@ -1,4 +1,4 @@
-# P2P 弹幕对战 · 安卓 APP 打包工程（p2p-battle-app）
+﻿# P2P 弹幕对战 · 安卓 APP 打包工程（p2p-battle-app）
 
 > 本工程只负责「把网页版游戏装进安卓 APP」，不维护游戏逻辑。
 > 游戏本体仍然在 `C:\Workspace\Marvis\p2p-battle` 维护，前端改完后用 `sync.ps1` 同步到本工程的 `www\`。
@@ -33,7 +33,7 @@ p2p-battle-app\
 ├─ sync.ps1                         ← 本地同步脚本：p2p-battle → www（唯一需要本地执行的脚本）
 ├─ www\                             ← ★同步产物，云构建的实际 webDir（会被 sync.ps1 整体覆盖，禁止手改）
 │  ├─ index.html  style.css  feed.css
-│  ├─ src\      （游戏运行时 JS，19 个文件）
+│  ├─ src\      （游戏运行时 JS，21 个文件）
 │  ├─ config\   （游戏配置 JSON，14 个文件）
 │  ├─ lib\      （pixi.min.js）
 │  ├─ assets\   （素材说明等）
@@ -80,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File .\sync.ps1
 1. **镜像同步**：`p2p-battle` → `www`，并清理 `www` 里的残留文件（保证 `www` 与游戏本体一致）；
 2. **发布 landing**：`landing\` → `www\landing\`；
 3. **重打适配补丁**（幂等，只改 `www`，不动游戏本体）：
-   - `www\src\net.js`：信令基址优先取 `location.origin`（手机浏览器同源直连本机服务）；
+   - `www\src\P2P2_net_transport.js`：信令基址优先取 `location.origin`（手机浏览器同源直连本机服务）；
    - `www\config\runtime.json`：`SIGNAL_BASE` 降级为兜底地址；
    - `www\index.html`：「本地局域网」勾选默认取消（默认走令牌服务器在线房间）；
 4. **校验并打印统计**（补丁是否生效、同步文件数）。

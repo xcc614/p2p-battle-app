@@ -5,7 +5,7 @@
     1) 运行时镜像同步：$Source（游戏本体工程）-> $Dest（www），并清理 www 中的残留文件
     2) 发布 landing   ：$AppRoot\landing -> $Dest\landing（APP 首页：二维码 + 进入游戏）
     3) 重打适配补丁（幂等，只改 www，不动游戏本体）：
-         ① www/src/net.js          信令基址优先取 location.origin（同源环境）
+         ① www/src/P2P2_net_transport.js  信令基址优先取 location.origin（同源环境）
          ② www/config/runtime.json SIGNAL_BASE 降级为兜底地址
          ③ www/index.html          「本地局域网」开关默认取消勾选
     4) 校验补丁结果并打印统计
@@ -35,11 +35,14 @@ param(
 $ErrorActionPreference = 'Stop'
 if (-not $Dest) { $Dest = Join-Path $AppRoot 'www' }
 
+# 游戏本体网络层文件名（游戏本体已改为 P2P2_ 前缀命名；后续本体再改名只需改这一处）
+$NetJsRel = 'src\P2P2_net_transport.js'
+
 # ================================================================== 排除规则
-$ExcludeRelDirs  = @('tools', 'docs', 'config\_backup', '.git', 'node_modules')
+$ExcludeRelDirs  = @('tools', 'docs', 'config\_backup', '__pycache__', '.git', 'node_modules')
 $ExcludeRelFiles = @('server_local.py', 'README.md', 'config-editor.html', 'config-editor.css', 'config-editor.js')
 $PreserveRelDirs = @('landing')      # APP 自有目录，镜像清理时跳过
-$PatchTargets    = @('src\net.js', 'config\runtime.json', 'index.html')   # 需要重打适配补丁的文件
+$PatchTargets    = @($NetJsRel, 'config\runtime.json', 'index.html')   # 需要重打适配补丁的文件
 
 $UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
 
@@ -82,8 +85,8 @@ function Get-RelFileList([string]$root) {
 
 # ================================================================== 适配补丁
 function Apply-PatchNetJs {
-  $path = Join-Path $destFull 'src\net.js'
-  if (-not (Test-Path -LiteralPath $path)) { Write-Host '[补丁1] 跳过：找不到 www\src\net.js' -ForegroundColor Red; return 0 }
+  $path = Join-Path $destFull $NetJsRel
+  if (-not (Test-Path -LiteralPath $path)) { Write-Host ('[补丁1] 跳过：找不到 www\' + $NetJsRel) -ForegroundColor Red; return 0 }
   $txt  = Read-TextUtf8 $path
   $orig = $txt
   $notes = @()
@@ -92,7 +95,7 @@ function Apply-PatchNetJs {
     $anchor = 'class Net {'
     $cnt = ([regex]::Matches($txt, [regex]::Escape($anchor))).Count
     if ($cnt -ne 1) {
-      Write-Host ("[补丁1] 失败：锚点 'class Net {{{{}}}}' 匹配 {0} 次，未修改 src\net.js" -f $cnt) -ForegroundColor Red
+      Write-Host ("[补丁1] 失败：锚点 'class Net {{{{}}}}' 匹配 {0} 次，未修改 {1}" -f $cnt, $NetJsRel) -ForegroundColor Red
       return 0
     }
     $helper = @'
@@ -152,10 +155,10 @@ function resolveSignalBase() {
 
   if ($txt -ne $orig) {
     if (-not $DryRun) { Write-TextUtf8 $path $txt }
-    Write-Host ('[补丁1] www\src\net.js 已更新：' + ($notes -join '；')) -ForegroundColor Green
+    Write-Host ('[补丁1] www\' + $NetJsRel + ' 已更新：' + ($notes -join '；')) -ForegroundColor Green
     return 1
   }
-  Write-Host ('[补丁1] www\src\net.js 无需变更：' + ($notes -join '；')) -ForegroundColor DarkGray
+  Write-Host ('[补丁1] www\' + $NetJsRel + ' 无需变更：' + ($notes -join '；')) -ForegroundColor DarkGray
   return 0
 }
 
@@ -224,7 +227,7 @@ function Apply-PatchIndexHtml {
 Write-Host ''
 Write-Host '=== sync.ps1 : p2p-battle -> www 运行时同步 ===' -ForegroundColor Cyan
 if (-not (Test-Path -LiteralPath $Source)) { throw "源目录不存在：$Source" }
-foreach ($must in @('index.html', 'src\net.js', 'config\runtime.json', 'lib\pixi.min.js')) {
+foreach ($must in @('index.html', $NetJsRel, 'config\runtime.json', 'lib\pixi.min.js')) {
   if (-not (Test-Path -LiteralPath (Join-Path $Source $must))) { throw "源目录缺少运行时文件：$must" }
 }
 $destFull = [System.IO.Path]::GetFullPath($Dest)
@@ -339,7 +342,7 @@ if (-not $SkipPatch) {
 if (-not $DryRun) {
   Write-Host ''
   Write-Host '--- 校验 ---' -ForegroundColor Cyan
-  $net  = Read-TextUtf8 (Join-Path $destFull 'src\net.js')
+  $net  = Read-TextUtf8 (Join-Path $destFull $NetJsRel)
   $json = Read-TextUtf8 (Join-Path $destFull 'config\runtime.json')
   $html = Read-TextUtf8 (Join-Path $destFull 'index.html')
 
@@ -347,7 +350,7 @@ if (-not $DryRun) {
   $ck2 = ($json -match ('"SIGNAL_BASE"\s*:\s*"http://127\.0\.0\.1:' + $Port + '"'))
   $ck3 = ($html -notmatch 'id="lanMode"\s+checked') -and ($html -match 'id="lanMode"')
 
-  Write-Host ("  [1] net.js 信令基址优先 location.origin : {0}" -f $(if ($ck1) { 'OK' } else { '未通过' })) -ForegroundColor $(if ($ck1) { 'Green' } else { 'Red' })
+  Write-Host ("  [1] net_transport.js 信令基址优先 location.origin : {0}" -f $(if ($ck1) { 'OK' } else { '未通过' })) -ForegroundColor $(if ($ck1) { 'Green' } else { 'Red' })
   Write-Host ("  [2] runtime.json SIGNAL_BASE 降级兜底    : {0}" -f $(if ($ck2) { 'OK' } else { '未通过' })) -ForegroundColor $(if ($ck2) { 'Green' } else { 'Red' })
   Write-Host ("  [3] index.html lanMode 默认未勾选        : {0}" -f $(if ($ck3) { 'OK' } else { '未通过' })) -ForegroundColor $(if ($ck3) { 'Green' } else { 'Red' })
 

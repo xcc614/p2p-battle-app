@@ -12,7 +12,7 @@ p2p-battle 资源目录
   bullet_arrow.png / bullet_fireball.png / bullet_laser.png ...
   fx_fire.png / fx_ice.png / fx_lightning.png / fx_burst.png ...
 
-加载流程：src/assets.js 的 preloadAll() 启动时自动收集
+加载流程：src/view_assets.js 的 preloadAll() 启动时自动收集
 UNITS[].image / BULLETS[].image / SKILLS[].fxImage 预加载；
 渲染层拿不到纹理时回退该配置的 color 色块，保证无图可玩。
 

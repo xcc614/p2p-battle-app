@@ -278,7 +278,12 @@ function quickGo() {
   const lanOn = !lan || lan.checked;
   if (!raw) {
     // 留空 = 创建房间：按「本地局域网」勾选分流
-    return lanOn ? startManualHub() : startServerRoom('');
+    //  - 勾选（默认）：0 服务器手动贴码星形房（房主生成邀请码，不需要房间码）
+    //  - 取消勾选（需求7）：不再建房，直接连信令服务器 WebSocket 进房；
+    //    房间码留空由服务端自动匹配可用房间（无可用则新建），房内成员自动互换信令
+    if (lanOn) return startManualHub();
+    if (GAME_CONFIG.SIGNAL_AUTO_JOIN === false) return startServerRoom('');   // 配置回退：按旧逻辑建房
+    return startSignalAutoJoin();
   }
   // 有值 = 加入房间：M2P = 手动贴码成员；其余 = 服务器房间码 / 对局令牌
   if (raw.slice(0, 3).toUpperCase() === 'M2P') return startManualMember(raw);
@@ -339,6 +344,41 @@ async function startServerRoom(raw) {
   } else {
     enterMemberLobby();
   }
+}
+
+// ---- 需求7：取消「本地局域网」勾选且房间码留空 → 不建房，直接连信令服务器 WS 进房 ----
+// 服务端按 type=auto 处理：自动匹配一个可用（未满员）房间加入，没有可用房间则新建并回传房间码；
+// 进房后房内成员变动由服务端 members 广播驱动，新老成员自动创建并互换 WebRTC 信令（无需手动贴码），
+// 信令服务器同时承担信令交换与 WebSocket 兜底中转（relay）。
+async function startSignalAutoJoin() {
+  if (guardLobby()) return;
+  App.name = document.getElementById('name').value || App.name;
+  App.roleId = 'hero';   // Boss 归属在房间内配置（进房后再指定）
+  const waiting = document.getElementById('waiting');
+  // 令牌服务器地址：优先用配置面板填写的地址（勾选局域网时该输入框禁用），留空则用默认地址
+  App.net.setSignalBase(toSignalHttpBase((document.getElementById('signalHost').value || '').trim()));
+  waiting.textContent = '正在连接信令服务器 …';
+  try {
+    App.token = await App.net.joinSignalAuto(App.name, App.roleId);
+  } catch (e) {
+    waiting.textContent = '';
+    alert('连接信令服务器失败：' + e.message + '\n请确认信令服务已启动（server_local.py），且该地址可访问。');
+    return;
+  }
+  waiting.textContent = '';
+  App.roleId = App.net.selfRole || App.roleId;
+  setupTokenShare();   // 房主/成员都展示当前房间码，便于把同一房间码发给其他人
+  if (App.net.isHost) enterLobbyView(); else enterMemberLobby();
+}
+
+// 令牌服务器地址归一化：面板里可能填 host:port / http(s):// / ws(s)://，统一转成 http(s) 基址
+function toSignalHttpBase(addr) {
+  const a = String(addr || '').trim().replace(/\/+$/, '');
+  if (!a) return 'http://' + defaultSignalAddr();
+  if (/^https?:\/\//i.test(a)) return a;
+  if (/^wss:\/\//i.test(a)) return 'https://' + a.slice(6);
+  if (/^ws:\/\//i.test(a)) return 'http://' + a.slice(5);
+  return 'http://' + a;
 }
 
 // 成员侧服务器加入：直接进入“等待房主组织开局”的大厅态（房主建连后还会补发 lobby_join，幂等）
@@ -1668,6 +1708,38 @@ function handleData(fromId, msg) {
       if (msgAgeSec(fromId, msg) > MSG_MAX_AGE) break;
       w.spawnSkillBullets(msg);
       break;
+    case 'cast':
+      // 需求1~4：远端读条（Boss / 队友的蓄力 / 禁咒 / 吟唱）——纯表现层，不参与判定与结算
+      if (typeof CastSystem !== 'undefined' && CastSystem.showRemote) CastSystem.showRemote(w, msg);
+      break;
+    // 本轮新增（撕裂 DoT 双链路）：远端命中上报——非房主端 checkCollisions/_settleLanding 命中后把载荷
+    //   （含 skillId / tear）发到房主，这里补上入站分支让信令真正抵达房主结算入口。
+    //   房主：w.handleHit(fromId, msg) 统一权威结算（伤害 + 撕裂应用）；非房主收到该信令直接忽略，避免重复结算。
+    case 'hit': {
+      if (App.net.isHost) w.handleHit(fromId, msg);
+      break;
+    }
+    // 本轮新增（需求④ 环绕飞刃拦截两端一致）：房主权威拦截结果的镜像信令——
+    //   房主端自己已结算，忽略即可；远端只按广播执行表现（摘掉被抵消的来袭弹 + 对齐格挡计数），
+    //   不自行判定、不结算伤害，避免双端各算一次。
+    case 'orbit_block': {
+      if (!App.net.isHost && w.applyOrbitBlock) w.applyOrbitBlock(msg);
+      break;
+    }
+    // 本轮新增（撕裂 DoT）：房主撕裂应用广播——远端仅镜像表现（红环 + 状态条 chip），血量以 damage 广播为准
+    case 'dot_add': {
+      const p = w.players.get(msg.id);
+      if (p) {
+        BuffSystem.mirrorDot(p, { defId: 'tear', skillId: msg.skillId || null, color: msg.color || null,
+                                  stacks: msg.stacks || 1, tLeft: (typeof msg.tLeft === 'number' ? msg.tLeft : undefined) });
+        w.pushFx('buff', p.x, p.y, msg.color || '#c04bff', { buffId: 'tear' });
+      }
+      break;
+    }
+    case 'charge_bar':
+      // 需求1：远端蓄力进度刷新（约 10Hz，由 world.chargeBarTick 发出）→ 驱动远端蓄力读条
+      if (w.onChargeBar) w.onChargeBar(msg);
+      break;
     case 'damage': {
       const p = w.players.get(msg.targetId);
       if (p) {
@@ -1845,6 +1917,9 @@ function loop(now) {
       BotAI.update(App.world, dt);   // 离线 AI（solo）与联机房间 AI（roomBots）每帧驱动
     }
     App.world.tick(dt);            // 房主权威 state 每 tick 广播含 bot 位置，远端平滑跟随
+    // 需求1~4：释放方式表现层每帧刷新——屏幕中下读条（自身 / BOSS）+ 禁咒打点 / 吟唱描摹浮层
+    //   只画表现与采集输入，判定与结算在 CastSystem / world.finishCast；非施法态浮层自动 display:none
+    if (typeof UiCast !== 'undefined' && UiCast.frame) UiCast.frame(App.world);
     // 本局结束（本地结算或收到 gameover 广播）：弹出 DOM 结算面板（不再 location.reload）
     if (App.world.gameOver && !App._goShown) {
       App._goShown = true;
@@ -1876,7 +1951,10 @@ function updateLocal(dt, now) {
 
   // 自瞄注入（需求5）：先记录本地位置并自瞄最近敌方，aim() 才能取到方向
   Input.updateSelf(me, App.world);
-  const mv = Input.moveDir();
+  // 需求4：施法中"禁止移动"开关——禁咒 / 吟唱默认开启，蓄力按 castConfig.lockMove 配置；
+  // 锁定期忽略方向输入（仍保留朝向更新与位移广播），避免打点/描摹时被摇杆拖出判定区
+  const moveLocked = (typeof CastSystem !== 'undefined' && CastSystem.locksMove) ? CastSystem.locksMove(me.id) : false;
+  const mv = moveLocked ? { x: 0, y: 0 } : Input.moveDir();
   me.x += mv.x * me.statsTotal.speed * dt;
   me.y += mv.y * me.statsTotal.speed * dt;
   me.x = Math.max(me.radius, Math.min(GAME_CONFIG.ARENA.w - me.radius, me.x));
@@ -2068,6 +2146,17 @@ function applySnapshot(msg) {
       });
       if (p._refreshBuffStats) p._refreshBuffStats();
     }
+    // 本轮新增（撕裂 DoT）：撕裂状态随快照对齐——中途加入 / 重连者据此重建红环与状态条 chip。
+    //   与 buffs 同口径：快照传剩余秒 tLeft，落到本地绝对时钟 end；仅表现，扣血仍以房主 damage 广播为准。
+    if (sp.dots) {
+      p.dots = [];
+      (sp.dots || []).forEach(d => {
+        if (!d) return;
+        BuffSystem.mirrorDot(p, { defId: d.defId || 'tear', skillId: d.skillId || null,
+                                  color: d.color || null, stacks: d.stacks || 1,
+                                  tLeft: (typeof d.tLeft === 'number' ? d.tLeft : undefined) });
+      });
+    }
     if (sp.skills) p.loadout = sp.skills;
     if (sp.id !== App.net.myId && typeof sp.x === 'number'
         && nowMs - (w._posDirectAt[sp.id] || 0) > 200) {
@@ -2191,6 +2280,8 @@ if (!window._p2pRotateBound) {
 function enterLobbyView() {
   App.state = 'lobby';
   App.lobbyMode = true;
+  // 需求1~4：离开战斗回到大厅时收走读条 / 小游戏浮层，避免遮挡菜单操作
+  if (typeof UiCast !== 'undefined' && UiCast.hide) UiCast.hide();
   App.lobbyFresh = true;           // 待开局（尚未打过本局）：成员加入只刷新人数不开战，开局一律等房主「开始游戏」
   App.canvas.style.display = 'none';
   document.getElementById('menu').style.display = 'block';
@@ -2289,6 +2380,8 @@ function enterBattleView() {
   App.state = 'battle';
   App.lobbyMode = false;
   App._goShown = false;
+  // 需求1~4：清掉上一局可能残留的读条 / 小游戏浮层，保证新一局从干净状态开始
+  if (typeof UiCast !== 'undefined' && UiCast.hide) UiCast.hide();
   App._snapReqSent = false;
   App._resumeGateMs = 0;              // 需求4：进入新一局，清空"后台切回"时间闸门
   App._bgAt = 0;
@@ -2381,6 +2474,7 @@ function hideBattleDomHud() {
 function backToMenu() {
   const w = App.world;
   if (typeof Touch !== 'undefined') Touch.setVisible(false);   // 触屏设备：离开战斗隐藏摇杆/技能键
+  if (typeof UiCast !== 'undefined' && UiCast.hide) UiCast.hide();   // 需求1~4：收走读条 + 禁咒/吟唱浮层
   hideBattleDomHud();                                          // 需求4：返回菜单必须隐藏 Boss 血条等战斗 HUD
   syncRotateHint();                                            // 需求5：非战斗态不显示横屏提示
   document.getElementById('panelGameover').style.display = 'none';
@@ -2940,11 +3034,26 @@ function bindCfgPanelEvents() {
     const tip = document.getElementById('cfgTip'); if (tip) tip.textContent = '';
     renderCfgPanel();
   });
-  // 候选池：点击 = 自动补该分组第一个空位；拖拽 = 精确落格
+  // 候选池：单击 = 装载（自动补该分组第一个空位）/ 再次单击同一候选 = 卸下（无需到右侧点 ×）；
+  //   拖拽 = 精确落格。判定「已装载」以草稿中该分组下的实际列表为准——
+  //   分组 key 与引擎同一口径：条目 data-grp 只有在草稿里确有该分组时才认，否则回落到未分组区
+  //   （单池模块如技能 / 遗物的分组 id 为空串，装载结果统一记在未分组区，避免二次单击判不到已装载而取消失败）。
   pool.addEventListener('click', e => {
     const it = e.target.closest ? e.target.closest('.cfg-item') : null;
     if (!it) return;
-    cfgDrop(it.dataset.pool, it.dataset.grp, null);
+    const tip = document.getElementById('cfgTip');
+    const mid = cfgState.moduleId;
+    const id = it.dataset.pool;
+    const map = cfgGroupMap(mid, cfgState.draft[mid]);
+    const key = map[it.dataset.grp] ? it.dataset.grp : CFG_UNGROUPED;
+    const at = (map[key] || []).indexOf(id);
+    if (at >= 0) {                                  // 再次单击已装载条目 → 取消装载
+      cfgRemoveAt(mid, key, at);
+      if (tip) tip.textContent = '';
+      renderCfgModule();
+      return;
+    }
+    cfgDrop(id, it.dataset.grp, null);
   });
   pool.addEventListener('dragstart', e => {
     const it = e.target.closest ? e.target.closest('.cfg-item') : null;
@@ -3064,10 +3173,12 @@ function renderCfgModule() {
         const cnt = arr.filter(x => x === id).length;
         const full = used >= s.cap && s.cap > 0;
         const cls = 'cfg-item' + (cnt ? ' picked' : '') + ((full && !cnt) ? ' dim' : '');
-        return '<div class="' + cls + '" draggable="true" data-pool="' + cfgEsc(id) + '" data-grp="' + cfgEsc(s.id) + '" title="' + cfgEsc(cfgEntryBrief(mid, id)) + '">'
+        // 单击即可切换装载状态：已装载的候选显示「已装载 N · 单击取消」；未装载的不加额外行，靠 title 提示「单击装载」
+        const hint = cnt ? '已装载 ' + cnt + ' · 单击取消' : '单击装载';
+        return '<div class="' + cls + '" draggable="true" data-pool="' + cfgEsc(id) + '" data-grp="' + cfgEsc(s.id) + '" title="' + cfgEsc(cfgEntryBrief(mid, id) + ' · ' + hint) + '">'
           + '<span class="ci-n">' + cfgEsc(Profiles.candidateName(mid, id)) + '</span>'
           + '<span class="ci-d">' + cfgEsc(cfgEntryBrief(mid, id)) + '</span>'
-          + (cnt ? '<span class="ci-c">已装载 ' + cnt + '</span>' : '')
+          + (cnt ? '<span class="ci-c">' + cfgEsc(hint) + '</span>' : '')
           + '</div>';
       }).join('') || ('<div class="cfg-empty">' + (s.ungrouped ? '暂无未分组条目' : '该分组暂无候选条目') + '</div>');
       return '<div class="cfg-sec' + (full0(used, s.cap) ? ' full' : '') + '" data-grp="' + cfgEsc(s.id) + '">'

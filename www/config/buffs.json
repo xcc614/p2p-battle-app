@@ -1,5 +1,5 @@
 {
-  "_doc": "场地 Buff 配置（P2）。运行时见 src/buffs.js。字段说明：name=显示名；icon/color=HUD 图标与拾取物颜色；desc=点击 HUD 图标展示的效果说明；duration=持续秒；maxStacks=最大叠加层数（1 表示不可叠层，重复拾取仅刷新时长；>1 表示可叠层，叠满后再次拾取刷新时长）；drop=false 表示不参与场地随机掉落（Boss 阶段自授 buff 用）。kind 五类：stats(属性加成，stats 内字段为加法增量，+0.25 表示 x1.25；damageTakenMul 为受伤倍率增量，负值减伤)、lifesteal(吸血，healRatio 为造成伤害的回血比例)、shield(护盾，shieldPct 为按最大生命比例生成吸收量)、heal(治疗补给，healFlat 为固定回血量，瞬时生效不占 buff 槽)、invuln(无敌，持续期内免疫一切伤害)。效果结算在房主权威端，属性同时供各端本地移动/冷却计算，拾取与授予经 buff_add 广播全员一致生效。",
+  "_doc": "场地 Buff 配置（P2）。运行时见 src/P2P2_battle_buffs.js。字段说明：name=显示名；icon/color=HUD 图标与拾取物颜色；desc=点击 HUD 图标展示的效果说明；duration=持续秒；maxStacks=最大叠加层数（1 表示不可叠层，重复拾取仅刷新时长；>1 表示可叠层，叠满后再次拾取刷新时长）；drop=false 表示不参与场地随机掉落（Boss 阶段自授 buff 用）。kind 五类：stats(属性加成，stats 内字段为加法增量，+0.25 表示 x1.25；damageTakenMul 为受伤倍率增量，负值减伤)、lifesteal(吸血，healRatio 为造成伤害的回血比例)、shield(护盾，shieldPct 为按最大生命比例生成吸收量)、heal(治疗补给，healFlat 为固定回血量，瞬时生效不占 buff 槽)、invuln(无敌，持续期内免疫一切伤害)。效果结算在房主权威端，属性同时供各端本地移动/冷却计算，拾取与授予经 buff_add 广播全员一致生效。 本轮新增 kind=tear（撕裂 DoT 的显示与默认参数宿主）：技能级 tear 字段缺省项从这里取值；撕裂状态挂 Player.dots（独立于 buffs），HUD 状态栏按 visible() 追加显示层数与剩余秒，角色身上显示红色撕裂圆环。drop:false 表示不参与场地随机掉落（仅由技能命中施加）。",
   "enrage": {
     "name": "狂暴",
     "icon": "⚔",
@@ -98,6 +98,18 @@
     },
     "duration": 4,
     "maxStacks": 1
+  },
+  "tear": {
+    "name": "撕裂",
+    "icon": "🩸",
+    "color": "#c04bff",
+    "kind": "tear",
+    "desc": "命中后持续掉血：每层每 0.5s 扣 6 点，最多 3 层，持续 3s（再次命中叠层并刷新时长）",
+    "dps": 6,
+    "tick": 0.5,
+    "duration": 3,
+    "maxStacks": 3,
+    "drop": false
   },
   "_bossDoc": "以下为 Boss 阶段自授 buff（drop:false = 不会出现在场地掉落物里，仅由 Boss 自身机制在触发阶段授予，显示在 Boss 血条下方）。",
   "boss_rage": {
