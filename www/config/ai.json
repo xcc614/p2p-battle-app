@@ -1,0 +1,52 @@
+[
+  {
+    "name": "很拉",
+    "noise": 0.5,
+    "lead": 0,
+    "speedMul": 0.6,
+    "pulse": 0.75,
+    "smart": 0.15,
+    "dodge": 100,
+    "orbit": 0.35
+  },
+  {
+    "name": "简单",
+    "noise": 0.34,
+    "lead": 0.15,
+    "speedMul": 0.8,
+    "pulse": 0.55,
+    "smart": 0.3,
+    "dodge": 5,
+    "orbit": 0.55
+  },
+  {
+    "name": "普通",
+    "noise": 0.2,
+    "lead": 0.45,
+    "speedMul": 1,
+    "pulse": 0.38,
+    "smart": 0.45,
+    "dodge": 2.6,
+    "orbit": 0.75
+  },
+  {
+    "name": "困难",
+    "noise": 0.1,
+    "lead": 0.75,
+    "speedMul": 1.15,
+    "pulse": 0.26,
+    "smart": 0.6,
+    "dodge": 1.6,
+    "orbit": 1
+  },
+  {
+    "name": "高手",
+    "noise": 0.035,
+    "lead": 1,
+    "speedMul": 1.3,
+    "pulse": 0.16,
+    "smart": 0.8,
+    "dodge": 0.9,
+    "orbit": 1.3
+  }
+]

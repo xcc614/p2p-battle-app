@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>p2p-battle — 弹幕对战（配置驱动）</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="menu">
+
+    <!-- 身份（联机与挑战通用）：昵称 / 本地局域网 / 配置 三项同排 -->
+    <div class="ident">
+      <input id="name" type="text" maxlength="12" placeholder="你的昵称">
+      <label class="check lan-check" title="默认不勾选=创建/加入房间走令牌服务器在线房间（APP 内置信令服务）；勾选则改走本地局域网（0 服务器手动贴码星形直连）">
+        <input type="checkbox" id="lanMode">
+        <span>本地局域网</span>
+      </label>
+      <!-- 唯一配置入口：联机对战与单人离线挑战共用同一份配置，取代原房间面板 / 单人区的两个按钮 -->
+      <!-- title 里的模块名清单由 src/main.js 的 syncCfgModuleNames() 按 config/modules.json 声明的 name 运行时拼接 -->
+      <button id="btnConfig" type="button" class="btn ghost ident-cfg" title="模块化配置（联机与单人共用同一份，联机会同步到房间）">配置</button>
+    </div>
+
+    <!-- ===== 提前组房间（位于联机/单人模块上方）：输入框留空=创建房间，有值=加入房间；创建方式跟随「本地局域网」勾选分流 ===== -->
+    <div class="quick-zone">
+      <div class="quick-title">提前组房间 · 快速开始</div>
+      <div class="quick-row">
+        <input id="quickTok" type="text" maxlength="4096" placeholder="留空 = 创建房间；粘贴朋友发的 M2P/房间码 = 加入房间">
+        <button id="btnQuickGo" type="button" class="btn primary" style="flex:0 0 150px">创建 / 加入</button>
+      </div>
+      <p class="hint quick-tip" id="quickTip">留空点按钮 = 创建房间（按「本地局域网」勾选分流）；粘贴朋友发来的码点按钮 = 加入对应房间。</p>
+    </div>
+
+    <div class="layout">
+      <!-- ===================== 联机对战 ===================== -->
+      <section class="zone online">
+        <div class="zone-head">
+          <h2>联机对战</h2>
+          <span class="tag">P2P 实时 · 需联网</span>
+        </div>
+        <!-- 令牌服务器配置：勾选本地局域网时禁用；取消勾选才可编辑地址并走在线房间 -->
+        <div id="sigPanel" class="mode-panel">
+          <div class="sub-title"><span class="st-dot dot-online"></span>令牌服务器（在线房间）</div>
+          <div class="row tight">
+            <span class="hint">令牌服务器地址：</span>
+            <input id="signalHost" type="text" placeholder="host:port（留空用默认）" style="width:220px" disabled>
+          </div>
+        </div>
+
+        <!-- 当前创建的房间：未创建不显示；创建后显示成员、可分配 Boss / 加 AI / 房主发起开始 -->
+        <div id="rpPanel" class="mode-panel" style="display:none">
+          <div class="rp-bar">
+            <span class="lb-tag" id="rpTag">房间</span>
+            <span class="rp-info" id="rpInfo"></span>
+            <button id="btnRpLeave" type="button" class="btn ghost lb-btn" style="display:none">退出房间</button>
+          </div>
+          <div class="sub-title">
+            <span class="st-dot dot-manual"></span>房间成员
+          </div>
+          <div id="rpMembers" class="mp-list"></div>
+          <div id="rpAiRow" class="rp-ai" style="display:none">
+            <div class="row tight ai-line">
+              <span class="hint">AI 角色：</span>
+              <!-- 数量档位上限与标题称谓由 src/main.js 运行时生成（ROOM_MAX 推算上限；称谓读 units.json 的 _aiNames） -->
+              <select id="rpAiCount" title="AI 数量"></select>
+              <select id="rpAiLevel" title="AI 难度"></select>
+              <label class="check" title="额外生成一个 AI Boss（有人类 Boss 时自动失效）"><input type="checkbox" id="rpAiBoss" checked><span>AI Boss</span></label>
+              <button id="btnRpRand" type="button" class="btn ghost" style="flex:0 0 auto;width:auto;padding:2px 10px">随机 Boss</button>
+            </div>
+          </div>
+          <button id="btnRpStart" type="button" class="btn primary" style="display:none">开始游戏</button>
+          <button id="btnRpDecline" type="button" class="btn ghost" style="display:none">拒绝本局</button>
+          <p class="hint" id="rpTip"></p>
+        </div>
+        <div id="waiting" class="tip"></div>
+      </section>
+
+      <!-- ===================== 单人挑战 ===================== -->
+      <section class="zone solo">
+        <div class="zone-head">
+          <h2>单人离线挑战</h2>
+          <span class="tag">离线单机 · 不联网</span>
+        </div>
+        <p class="hint zone-desc">完全本地单机玩法：无需房间码 / 令牌 / 信令服务器，选好配置立即开始，断网也不受影响。</p>
+        <div class="challenge-box">
+          <div class="row tight">
+            <select id="soloOpp">
+              <!-- 选项文案由 src/main.js 的 syncSoloOppText() 按配置生成（单位名 + units.json 的 _aiNames 称谓） -->
+              <option value="boss">挑战 AI Boss</option>
+              <option value="team">挑战 AI 队</option>
+            </select>
+          </div>
+          <div class="row tight">
+            <!-- 难度档位由 src/main.js 按 config/ai.json 的档位数量动态填充（默认选中项取 config/challenge.json 的 aiLevel） -->
+            <select id="soloDiff" title="AI 难度"></select>
+          </div>
+          <div class="row tight">
+            <!-- 单位名与「（默认）」标记由 src/main.js 的 populateUnitSelectors() 按 config 动态填充 -->
+            <select id="soloUnit">
+              <option value="hero">你（默认）</option>
+            </select>
+          </div>
+          <div class="row tight">
+            <!-- 选项文案（单位名 + 默认标记）由 src/main.js 的 populateUnitSelectors() 按 config 动态填充 -->
+            <select id="soloBoss">
+              <option value="demon_lord">敌方 Boss（默认）</option>
+            </select>
+          </div>
+          <div class="row tight" id="alliesRow">
+            <!-- AI 队友数量档位由 src/main.js 按 config/runtime.json 的 ROOM_MAX 推算上限后动态填充（标题称谓读 units.json 的 _aiNames） -->
+            <select id="soloAllies" title="AI 数量"></select>
+          </div>
+          <button id="btnChallenge" class="btn challenge">开始单人游戏</button>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- ===== 对局令牌 / 手动房悬浮条：默认右上角折叠小条（可拖动、可展开/收起），不挡主界面 ===== -->
+  <div id="joinBar" class="jb-root jb-collapsed" style="display:none">
+    <div id="jbHead" class="jb-head">
+      <span id="jbTitle" class="jb-title">本局令牌</span>
+      <span id="jbSub" class="jb-sub">复制发给朋友即可加入</span>
+      <button id="jbCopyBtn" type="button" class="jb-btn">复制</button>
+      <button id="jbFoldBtn" type="button" class="jb-btn">展开 ▾</button>
+    </div>
+    <div id="joinTokZone" class="jb-zone">
+      <div style="margin-bottom:4px">本局令牌（复制发给朋友，对方粘贴到房间码框即连入本房间）</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="joinTok" type="text" readonly style="flex:1;min-width:300px;background:#0b0f1a;color:#8be9ff;border:1px solid #3b4a7a;border-radius:4px;padding:3px 6px" onclick="this.select()">
+        <button id="btnTokCopy" type="button" style="background:#2b3b66;border:1px solid #5b6cff;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer">复制</button>
+      </div>
+    </div>
+
+    <div id="manualHubZone" class="jb-zone" style="display:none">
+      <div style="margin-bottom:4px">0 服务器手动房（房主=星形中心，全员连你）</div>
+      <div style="margin-bottom:2px">① 邀请码：复制发给朋友</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <input id="invTok" type="text" readonly style="flex:1;min-width:300px;background:#0b0f1a;color:#8be9ff;border:1px solid #3b4a7a;border-radius:4px;padding:3px 6px;font-size:11px" onclick="this.select()">
+        <button id="btnInvCopy" type="button" style="background:#2b3b66;border:1px solid #5b6cff;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer">复制</button>
+        <button id="btnInvNext" type="button" style="background:#333a55;border:1px solid #5b6cff;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer">刷新邀请码</button>
+      </div>
+      <div style="margin-bottom:2px">② 应答码：粘贴朋友发回的 M2P 码后点确认</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="ansTok" type="text" placeholder="M2P…" style="flex:1;min-width:300px;background:#0b0f1a;color:#8be9ff;border:1px solid #3b4a7a;border-radius:4px;padding:3px 6px" onkeydown="if(event.key==='Enter')onManualAnswer()">
+        <button id="btnAnsOk" type="button" style="background:#2b3b66;border:1px solid #5b6cff;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer">确认应答</button>
+      </div>
+      <div id="manualHubStatus" class="tip" style="margin-top:4px"></div>
+    </div>
+
+    <div id="manualMemberZone" class="jb-zone" style="display:none">
+      <div style="margin-bottom:2px">0 服务器手动加入：应答码复制发给房主，房主确认后进入房间等待开局</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="ansTokOut" type="text" readonly style="flex:1;min-width:300px;background:#0b0f1a;color:#8be9ff;border:1px solid #3b4a7a;border-radius:4px;padding:3px 6px;font-size:11px" onclick="this.select()">
+        <button id="btnAnsCopy" type="button" style="background:#2b3b66;border:1px solid #5b6cff;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer">复制</button>
+      </div>
+      <div id="manualMemberStatus" class="tip" style="margin-top:4px"></div>
+    </div>
+  </div>
+
+  <canvas id="game" width="1600" height="1000" style="display:none"></canvas>
+
+  <!-- ===== 移动端浮动操作层（触屏设备进入战斗后显示）：左摇杆移动 + 右侧技能键 ===== -->
+  <div id="touchLayer">
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <div id="skillPad">
+      <!-- 技能键的槽位数由 config/skillbar.json（capacity / loadout）决定，进入战斗时由 touch.js
+           的 Touch.refreshSkillKeys() 动态生成，此处不再写死固定键数 -->
+      <div id="skillRow"></div>
+    </div>
+  </div>
+
+  <!-- ===== 战斗 DOM HUD（需求13/14/15：顶部 Boss 条 + 左上本队成员，均由 render._syncDomHud 填充）===== -->
+  <div id="hudTop" style="display:none"></div>
+  <div id="hudTeam" style="display:none"></div>
+
+  <!-- ===== 需求5：移动端竖屏战斗提示（浏览器不允许自动横屏时，引导用户手动旋转）===== -->
+  <div id="rotateHint" style="display:none">请将手机横屏握持，获得横版战斗视野</div>
+
+  <!-- ===== 底部状态栏（只显示状态 buff；PC / 移动端均居中底部，技能 CD 只在技能键上转）===== -->
+  <div id="statusBar"></div>
+
+  <!-- ===== 点击底部 buff 图标 → 屏幕中上方弹出该 buff 的效果说明（DOM 实现，不依赖画布渲染）===== -->
+  <div id="buffTip"></div>
+
+  <!-- ===== 房间成员面板（战斗 / 返回菜单后常驻，成员进出实时刷新）===== -->
+  <button id="membersFab" type="button" style="display:none" title="查看房间成员">成员</button>
+  <div id="membersPanel" style="display:none">
+    <div class="mp-head">
+      <span id="mpTitle">房间成员</span>
+      <button id="mpClose" type="button" class="mp-close" title="收起">×</button>
+    </div>
+    <div id="mpList" class="mp-list"></div>
+  </div>
+
+  <!-- ===== 结算面板（对局结束不再刷新页面；再来一局仅房主/单机可发起）===== -->
+  <div id="panelGameover" class="bp-overlay" style="display:none">
+    <div class="bp-card">
+      <div class="bp-title" id="goTitle">对局结束</div>
+      <div class="bp-sub" id="goSub"></div>
+      <div class="bp-actions">
+        <button id="btnAgain" class="btn primary" type="button">再来一局</button>
+        <button id="btnBackMenu" class="btn ghost" type="button">返回菜单</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 开局准备（提前组房的首局 / 打完后的再来一局共用；沿用当前连接，不重建房间/不重贴码）===== -->
+  <div id="panelRematch" class="bp-overlay" style="display:none">
+    <div class="bp-card">
+      <div class="bp-title">开局准备 · 接受加入</div>
+      <div class="bp-sub">选择你想当的角色（Boss / 勇者），由房主确认后统一开战；沿用当前房间连接，无需重新建房或贴码</div>
+      <div id="rematchList" class="mp-list"></div>
+      <div id="rematchTip" class="tip"></div>
+      <div class="bp-actions">
+        <button id="btnRematchStart" class="btn primary" type="button">开始对战</button>
+        <button id="btnRematchCancel" class="btn ghost" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 配置面板（模块化：左侧候选池按模块/分组折叠 + 右侧格子区拖拽装载）===== -->
+  <div id="panelCfg" class="bp-overlay" style="display:none">
+    <div class="bp-card cfg-card">
+      <div class="bp-title">配置</div>
+      <div class="bp-sub">上方页签切换模块（装备 / 宝石 / 铭文 / 技能…），左侧候选池按分组折叠，把候选拖进右侧格子即装载（也可直接点候选自动补位）；格子上的 × 卸下，把候选拖到已占用格子即替换。每个分组有独立槽位上限，模块总装载不超过上限（技能最多 <span id="cfgSkillMaxSlots">8</span> 个，数值取自 config/modules.json 技能模块 maxSlots）。</div>
+      <div class="cfg-profile">
+        <label class="cfg-prof-label" for="cfgProfile">装配来源</label>
+        <select id="cfgProfile"></select>
+        <div id="cfgProfileDesc" class="tip"></div>
+      </div>
+      <div id="cfgTabs" class="cfg-tabs"></div>
+      <div class="cfg-main">
+        <div class="cfg-col cfg-pool-wrap">
+          <div class="cfg-col-h">候选池</div>
+          <div id="cfgPool" class="cfg-pool"></div>
+        </div>
+        <div class="cfg-col cfg-grid-wrap">
+          <div class="cfg-col-h">格子区</div>
+          <div id="cfgGrid" class="cfg-grid"></div>
+          <div id="cfgModTip" class="tip"></div>
+        </div>
+      </div>
+      <label class="check cfg-auto" id="cfgAutoLabel" title="开启后你的角色会自动对最近敌人释放普攻（技能由 config/skills.json 的 auto:true 标记判定），无需按技能键">
+        <input type="checkbox" id="cfgAuto"><span id="cfgAutoText">自动普攻（无需按键，冷却好自动打最近敌人）</span>
+      </label>
+      <div id="cfgTip" class="tip"></div>
+      <div class="bp-actions">
+        <button id="btnCfgPreset" class="btn ghost" type="button" title="按当前模块的分组上限，自动装满默认/优先级最高的条目">一键预设</button>
+        <button id="btnCfgClear" class="btn ghost" type="button" title="清空当前模块的全部格子（点保存后生效）">清空当前模块</button>
+        <button id="btnCfgSave" class="btn primary" type="button">保存</button>
+        <button id="btnCfgClose" class="btn ghost" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 返回菜单（软切房间大厅）：保留连接与成员面板，房主可组织下一局 ===== -->
+  <div id="lobbyBar" style="display:none">
+    <span class="lb-tag" id="lbTag">房间</span>
+    <span class="lb-info" id="lbInfo"></span>
+    <button id="btnLobbyAgain" class="btn primary lb-btn" type="button" style="display:none">再来一局</button>
+    <button id="btnLobbyLeave" class="btn ghost lb-btn" type="button" style="display:none">退出房间</button>
+  </div>
+
+  <!-- 菜单页 UI 联动：「本地局域网」默认勾选，取消勾选才启用令牌服务器配置 -->
+  <script>
+    // 「本地局域网」勾选：快速开始提示联动
+    function updateQuickHint() {
+      var tip = document.getElementById('quickTip');
+      var lan = document.getElementById('lanMode');
+      if (!tip) return;
+      var on = !lan || lan.checked;
+      tip.innerHTML = on
+        ? '留空点按钮 = 创建<strong>本地局域网房间</strong>（0 服务器手动贴码，无需房间码）；粘贴朋友发来的 M2P 码 = 加入。取消「本地局域网」后此框改为创建 / 加入令牌服务器在线房间。'
+        : '留空点按钮 = 创建<strong>令牌服务器在线房间</strong>（自动生成房间码 / 令牌）；粘贴朋友发来的房间码 / 令牌 = 加入对应房间。';
+    }
+    // 「本地局域网」勾选：令牌服务器配置整块禁用/启用（常驻显示，不做隐藏跳变）
+    function updateLanState() {
+      var lan = document.getElementById('lanMode');
+      var on = !lan || lan.checked;
+      var host = document.getElementById('signalHost');
+      var st = document.getElementById('sigStateText');
+      var tip = document.getElementById('sigTip');
+      if (host) host.disabled = on;
+      if (st) st.textContent = on ? '已勾选「本地局域网」：此配置禁用，创建/加入走 0 服务器手动贴码' : '已取消「本地局域网」：可配置令牌服务器地址，创建/加入走在线房间';
+      if (tip) tip.textContent = on ? '当前已勾选「本地局域网」：创建/加入均走 0 服务器手动贴码，此配置禁用。取消勾选后这里才会启用。' : '当前未勾选「本地局域网」：创建/加入走令牌服务器在线房间（成员需能访问同一服务器）。留空使用默认地址。';
+    }
+    // 局域网勾选变化：若房间已创建（大厅/对局中）不允许切换，需先退出房间
+    function onLanToggle(chk) {
+      var g = window.App;
+      if (g && (g.lobbyMode || (g.state === 'battle' && g.net && g.net.isMulti))) {
+        chk.checked = !chk.checked;
+        window.alert('房间已创建/对局进行中，请先退出房间，再切换局域网/服务器。');
+        return;
+      }
+      if (typeof updateLanState === 'function') updateLanState();
+      if (typeof updateQuickHint === 'function') updateQuickHint();
+    }
+    updateLanState();
+    // 「本地局域网」勾选框绑定变化：取消勾选后令牌服务器地址立即变为可编辑（此前从未绑定 change，导致始终禁用）
+    (function () {
+      var chk = document.getElementById('lanMode');
+      if (chk) chk.addEventListener('change', function () { onLanToggle(chk); });
+    })();
+  </script>
+
+  <!-- 引擎加载：部署(EdgeOne/任何静态站)优先走 jsdelivr CDN，pixi.js@8 自动跟随 v8 最新稳定版；
+       本地/离线调试自动回退 lib/pixi.min.js；玩法数据全部走 config/*.json（loadGameConfig 启动载入） -->
+  <script>
+    (function () {
+      var SRC = ['src/config_loader.js', 'src/conditions.js', 'src/combat.js', 'src/profiles.js', 'src/triggers.js', 'src/buffs.js', 'src/feed.js', 'src/assets.js', 'src/input.js', 'src/touch.js', 'src/player.js', 'src/bullet.js', 'src/token.js', 'src/net.js', 'src/world.js', 'src/boss.js', 'src/bot.js', 'src/render.js', 'src/main.js'];
+      var CDN = 'https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js';
+      var CDN2 = 'https://unpkg.com/pixi.js@8/dist/pixi.min.js';
+      var LOCAL = 'lib/pixi.min.js';
+      // 本地 python http.server 不发 Cache-Control，浏览器启发式缓存会继续用旧 JS/CSS，
+      // 导致“改了代码但手机端看不到效果”。同源资源统一追加启动时间戳（CDN 不追加，保留其缓存）。
+      var LOCAL_VER = Date.now();
+      (function () {   // 样式同理：追加带版本串的新 link（后加载者优先，覆盖同名的旧缓存样式）
+        // feed.css：中上纵向滚动提示区（FxFeed）样式
+        ['style.css', 'feed.css'].forEach(function (css) {
+          var l = document.createElement('link');
+          l.rel = 'stylesheet';
+          l.href = css + '?v=' + LOCAL_VER;
+          document.head.appendChild(l);
+        });
+      })();
+      function loadScript(src, cb) {
+        var s = document.createElement('script');
+        s.src = /^https?:/i.test(src)
+          ? src
+          : (src + (src.indexOf('?') < 0 ? '?' : '&') + 'v=' + LOCAL_VER);
+        s.onload = function () { cb(null); };
+        s.onerror = function () { cb(new Error('load failed: ' + src)); };
+        document.head.appendChild(s);
+      }
+      function loadSeq(list, i, cb) {
+        if (i >= list.length) { cb(); return; }
+        loadScript(list[i], function (err) {
+          if (err) { cb(err); return; }
+          loadSeq(list, i + 1, cb);
+        });
+      }
+      function fatal(msg) {
+        document.body.insertAdjacentHTML('beforeend',
+          '<div style="position:fixed;inset:0;background:#0b0f1a;color:#ff8a8a;display:flex;align-items:center;justify-content:center;z-index:999;font-size:15px">' + msg + '</div>');
+      }
+      function boot() {
+        loadSeq(SRC, 0, function (err) {
+          if (err) fatal('脚本加载失败：' + err.message + '（请通过 http 服务访问，勿用 file://）');
+        });
+      }
+      loadScript(CDN, function (err) {
+        if (!err && window.PIXI) { boot(); return; }
+        loadScript(CDN2, function (err2) {
+          if (!err2 && window.PIXI) { boot(); return; }
+          loadScript(LOCAL, function (err3) {
+            if (!err3 && window.PIXI) { boot(); return; }
+            fatal('PixiJS 加载失败：jsdelivr/unpkg CDN 均不可用且本地 lib/pixi.min.js 缺失');
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

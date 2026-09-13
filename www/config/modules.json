@@ -1,0 +1,195 @@
+{
+  "_doc": "模块注册表（设计文档《原子属性与模块化配置设计_v1》第八章）：定义玩家可挂载的模块类型与槽位上限 maxSlots。source 指向条目来源库——equipment=config/equipment.json，mods=config/mods.json，skills=config/skills.json，custom=本文件 entries 内联条目。候选范围不再用白名单：候选池由「条目库全部条目按 group 标签与模块 groups 声明实时解析」得出——条目的 group 命中本模块 groups[].id 即进入该分组候选；group 为空 / 未知 / 不被任何模块声明时归入候选池底部「未分组」折叠区，不丢弃；被 excludeGroups 列出的分组（如 Boss 技能的 enemy 组）不进本模块候选池。allowDuplicate=true 允许同一模块内重复选同一条目。玩家档案（config/profiles.json）只记录模块 id 与条目 id，真实数值与技能由 src/combat.js + src/profiles.js 按本表解析叠加——新增模块/条目零代码改动。",
+  "_groups_doc": "分组/部位结构（v2）：模块下用 groups 声明若干分组，每组 { id, name, maxSlots, allowDuplicate?, notes? }。语义：① id 与条目库条目的 group 标签对齐（装备兼容旧 slot 标签），条目归属哪个分组由「条目.group → 条目.slot」解析；② 每组 maxSlots 是该组独立槽位上限，Σ组上限 = 该模块可配置的总格子数（应 ≤ 模块 maxSlots）；③ 组内候选范围 = 来源库中 group 等于本组 id 的条目（无需再写 pool 白名单）；④ 未声明的分组标签不丢弃：候选池底部「未分组」折叠区收纳全部未归属条目，可正常拖拽装载；⑤ excludeGroups 列出的分组（按 group id）整体不进本模块候选池，供「示例/Boss 专用」条目隔离；⑥ 组级 allowDuplicate 覆盖模块级（缺省继承模块 allowDuplicate）。引擎只做组上限截断，新增分组/条目零代码改动；relic 未声明 groups，保持单池行为（全部条目共用一个池，上限 maxSlots）。",
+  "equipment": {
+    "name": "装备",
+    "maxSlots": 8,
+    "source": "equipment",
+    "allowDuplicate": false,
+    "notes": "武器/护甲/饰品主模块，来源 config/equipment.json 全部条目按 group（兼容旧 slot）实时分组；条目可带 mods 子挂载（无限嵌套）",
+    "groups": [
+      {
+        "id": "weapon",
+        "name": "武器",
+        "maxSlots": 2,
+        "notes": "主手/副手，任选 2 件（铁剑/木弓/钢刃/双匕首/秘法法杖/巨斧）"
+      },
+      {
+        "id": "helmet",
+        "name": "头盔",
+        "maxSlots": 1,
+        "notes": "头部，任选 1 件（皮质/铁质/法师兜帽）"
+      },
+      {
+        "id": "armor",
+        "name": "护甲",
+        "maxSlots": 2,
+        "notes": "躯干，任选 2 件（皮甲/板甲/秘法长袍）"
+      },
+      {
+        "id": "accessory",
+        "name": "首饰",
+        "maxSlots": 3,
+        "notes": "戒指/靴子/护符/吊坠，任选 3 件（4 选 3）"
+      }
+    ]
+  },
+  "gem": {
+    "name": "宝石",
+    "maxSlots": 6,
+    "source": "mods",
+    "allowDuplicate": true,
+    "notes": "按色系分组，来源 config/mods.json 全部 gem_* 条目按 group 实时分组；同色可重复镶嵌",
+    "groups": [
+      {
+        "id": "gem_red",
+        "name": "红色系（暴击/伤害）",
+        "maxSlots": 2,
+        "allowDuplicate": true
+      },
+      {
+        "id": "gem_blue",
+        "name": "蓝色系（弹量）",
+        "maxSlots": 2,
+        "allowDuplicate": true
+      },
+      {
+        "id": "gem_green",
+        "name": "绿色系（生命）",
+        "maxSlots": 1,
+        "allowDuplicate": true
+      },
+      {
+        "id": "gem_yellow",
+        "name": "黄色系（速度）",
+        "maxSlots": 1,
+        "allowDuplicate": true
+      }
+    ]
+  },
+  "rune": {
+    "name": "铭文",
+    "maxSlots": 4,
+    "source": "mods",
+    "allowDuplicate": false,
+    "notes": "按用途分组：攻击 / 迅捷 / 守护",
+    "groups": [
+      {
+        "id": "rune_attack",
+        "name": "攻击铭文",
+        "maxSlots": 2,
+        "allowDuplicate": false
+      },
+      {
+        "id": "rune_agility",
+        "name": "迅捷铭文",
+        "maxSlots": 1,
+        "allowDuplicate": false
+      },
+      {
+        "id": "rune_ward",
+        "name": "守护铭文",
+        "maxSlots": 1,
+        "allowDuplicate": false
+      }
+    ]
+  },
+  "addon": {
+    "name": "追加模块",
+    "maxSlots": 4,
+    "source": "mods",
+    "allowDuplicate": true,
+    "notes": "按职责分组：进攻 / 防御 / 功能",
+    "groups": [
+      {
+        "id": "addon_offense",
+        "name": "进攻追加",
+        "maxSlots": 2,
+        "allowDuplicate": true
+      },
+      {
+        "id": "addon_defense",
+        "name": "防御追加",
+        "maxSlots": 1,
+        "allowDuplicate": true
+      },
+      {
+        "id": "addon_utility",
+        "name": "功能追加",
+        "maxSlots": 1,
+        "allowDuplicate": true
+      }
+    ]
+  },
+  "skill": {
+    "name": "技能",
+    "maxSlots": 8,
+    "source": "skills",
+    "allowDuplicate": false,
+    "notes": "条目的 id 即技能 id，直接进候选技能池（是否出战仍由 loadout 决定）。分组槽位之和 = 8，即最多带 8 个技能。候选按条目 group 标签与下列分组实时对齐；group=enemy 的 Boss 技能由 excludeGroups 排除，不进玩家候选池。",
+    "groups": [
+      {
+        "id": "skill_basic",
+        "name": "基础",
+        "maxSlots": 2,
+        "notes": "普攻 + 二选一（普攻 auto_attack 自动出战，建议始终留 1 格）"
+      },
+      {
+        "id": "skill_shot",
+        "name": "射击系",
+        "maxSlots": 2
+      },
+      {
+        "id": "skill_element",
+        "name": "元素系",
+        "maxSlots": 2
+      },
+      {
+        "id": "skill_ultimate",
+        "name": "终极技",
+        "maxSlots": 2
+      }
+    ],
+    "excludeGroups": [
+      "enemy"
+    ]
+  },
+  "relic": {
+    "name": "遗物（自定义增挂示例）",
+    "maxSlots": 3,
+    "source": "custom",
+    "allowDuplicate": false,
+    "notes": "source=custom：条目直接写在本文件 entries 里，编辑器「新增模块」即按此结构生成",
+    "entries": {
+      "relic_blood": {
+        "name": "血之遗物",
+        "add": {
+          "hp": 200
+        },
+        "condition": {
+          "type": "hpBelow",
+          "value": 0.5
+        }
+      },
+      "relic_swift": {
+        "name": "风之遗物",
+        "add": {
+          "speed": 25
+        },
+        "condition": {
+          "type": "timeAfter",
+          "value": 10
+        }
+      },
+      "relic_thorn": {
+        "name": "荆棘遗物",
+        "add": {
+          "armor": 4
+        },
+        "unlockSkills": [
+          "nova"
+        ]
+      }
+    }
+  }
+}

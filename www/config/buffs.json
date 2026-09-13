@@ -1,0 +1,153 @@
+{
+  "_doc": "场地 Buff 配置（P2）。运行时见 src/buffs.js。字段说明：name=显示名；icon/color=HUD 图标与拾取物颜色；desc=点击 HUD 图标展示的效果说明；duration=持续秒；maxStacks=最大叠加层数（1 表示不可叠层，重复拾取仅刷新时长；>1 表示可叠层，叠满后再次拾取刷新时长）；drop=false 表示不参与场地随机掉落（Boss 阶段自授 buff 用）。kind 五类：stats(属性加成，stats 内字段为加法增量，+0.25 表示 x1.25；damageTakenMul 为受伤倍率增量，负值减伤)、lifesteal(吸血，healRatio 为造成伤害的回血比例)、shield(护盾，shieldPct 为按最大生命比例生成吸收量)、heal(治疗补给，healFlat 为固定回血量，瞬时生效不占 buff 槽)、invuln(无敌，持续期内免疫一切伤害)。效果结算在房主权威端，属性同时供各端本地移动/冷却计算，拾取与授予经 buff_add 广播全员一致生效。",
+  "enrage": {
+    "name": "狂暴",
+    "icon": "⚔",
+    "color": "#ff5555",
+    "kind": "stats",
+    "desc": "伤害提高 35%，持续 12s",
+    "stats": {
+      "damageMul": 0.35
+    },
+    "duration": 12,
+    "maxStacks": 1
+  },
+  "haste": {
+    "name": "疾攻",
+    "icon": "⚡",
+    "color": "#ffe14d",
+    "kind": "stats",
+    "desc": "攻速提高 40%，最多 2 层，持续 14s",
+    "stats": {
+      "atkSpeedMul": 0.4
+    },
+    "duration": 14,
+    "maxStacks": 2
+  },
+  "swift": {
+    "name": "神行",
+    "icon": "💨",
+    "color": "#5cd6ff",
+    "kind": "stats",
+    "desc": "移速提高 30%，持续 12s",
+    "stats": {
+      "speedMul": 0.3
+    },
+    "duration": 12,
+    "maxStacks": 1
+  },
+  "vamp": {
+    "name": "嗜血",
+    "icon": "🩸",
+    "color": "#ff6b9d",
+    "kind": "lifesteal",
+    "desc": "造成伤害的 15% 转化为回血，最多 2 层，持续 12s",
+    "healRatio": 0.15,
+    "duration": 12,
+    "maxStacks": 2
+  },
+  "shield": {
+    "name": "护盾",
+    "icon": "🛡",
+    "color": "#8be9fd",
+    "kind": "shield",
+    "desc": "获得最大生命 35% 的护盾，持续 16s",
+    "shieldPct": 0.35,
+    "duration": 16,
+    "maxStacks": 1
+  },
+  "fury": {
+    "name": "暴怒",
+    "icon": "🔥",
+    "color": "#ff8800",
+    "kind": "stats",
+    "desc": "伤害提高 60%，持续 8s",
+    "stats": {
+      "damageMul": 0.6
+    },
+    "duration": 8,
+    "maxStacks": 1
+  },
+  "recover": {
+    "name": "治疗补给",
+    "icon": "✚",
+    "color": "#2ee67f",
+    "kind": "heal",
+    "desc": "立即回复 40 点生命（瞬时生效，不占 buff 槽）",
+    "healFlat": 40,
+    "drop": true
+  },
+  "ice_shield": {
+    "name": "冰晶护盾",
+    "icon": "❄",
+    "color": "#7fe7ff",
+    "kind": "shield",
+    "desc": "获得最大生命 40% 的护盾，持续 14s",
+    "shieldPct": 0.4,
+    "duration": 14,
+    "maxStacks": 1
+  },
+  "frost_slow": {
+    "name": "冰霜减速",
+    "icon": "🧊",
+    "color": "#aeefff",
+    "kind": "stats",
+    "desc": "移速降低 30%，持续 4s",
+    "stats": {
+      "speedMul": -0.3
+    },
+    "duration": 4,
+    "maxStacks": 1
+  },
+  "_bossDoc": "以下为 Boss 阶段自授 buff（drop:false = 不会出现在场地掉落物里，仅由 Boss 自身机制在触发阶段授予，显示在 Boss 血条下方）。",
+  "boss_rage": {
+    "name": "狂暴强化",
+    "icon": "⚔",
+    "color": "#ff4d4d",
+    "kind": "stats",
+    "desc": "Boss 阶段强化：造成的伤害提高 50%，持续 20s",
+    "stats": {
+      "damageMul": 0.5
+    },
+    "duration": 20,
+    "maxStacks": 1,
+    "drop": false
+  },
+  "boss_guard": {
+    "name": "岩甲护体",
+    "icon": "🛡",
+    "color": "#7da2ff",
+    "kind": "stats",
+    "desc": "Boss 阶段强化：受到的伤害降低 40%，持续 18s",
+    "stats": {
+      "damageTakenMul": -0.4
+    },
+    "duration": 18,
+    "maxStacks": 1,
+    "drop": false
+  },
+  "boss_invuln": {
+    "name": "无敌",
+    "icon": "✹",
+    "color": "#ffd166",
+    "kind": "invuln",
+    "desc": "Boss 阶段强化：免疫一切伤害，持续 3s",
+    "duration": 3,
+    "maxStacks": 1,
+    "drop": false
+  },
+  "boss_haste": {
+    "name": "迅捷",
+    "icon": "💨",
+    "color": "#5cd6ff",
+    "kind": "stats",
+    "desc": "Boss 阶段强化：移速提高 45%、攻速提高 35%，持续 16s",
+    "stats": {
+      "speedMul": 0.45,
+      "atkSpeedMul": 0.35
+    },
+    "duration": 16,
+    "maxStacks": 1,
+    "drop": false
+  }
+}

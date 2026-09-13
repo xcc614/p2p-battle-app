@@ -1,0 +1,26 @@
+{
+  "name": "p2p-battle-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "P2P 弹幕对战 —— 安卓壳工程（Capacitor + 内置 Java 信令/静态托管服务）。本目录是 Capacitor 工程根目录，编译全程在 GitHub Actions 云端完成，本地不装 JDK / Android SDK。",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "cap:add": "cap add android",
+    "cap:sync": "cap sync android",
+    "inject": "pwsh -NoProfile -File ./inject.ps1",
+    "android:prepare": "npm run cap:add && npm run cap:sync && npm run inject",
+    "android:assemble": "cd android && ./gradlew assembleDebug",
+    "android:assemble:release": "cd android && ./gradlew assembleRelease",
+    "android:bundle": "cd android && ./gradlew bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/android": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  }
+}

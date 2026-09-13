@@ -1,0 +1,49 @@
+/* ===== 中上纵向滚动提示区（FxFeed）=====
+   buff 点击说明 / Boss 阶段横幅文本统一走这里：多条自下而上堆叠，
+   新消息贴底加入、已有消息整体上挤（transform 过渡即上挤动画），逐条渐隐渐出。
+   字号 / 颜色 / 上挤速度由 src/feed.js 按强度分档内联设置（--c 颜色、--ease 上挤时长、fontSize 字号）。===== */
+#fxFeed {
+  /* 本轮改动：提示区再往上靠（top 4vh→1vh，高度 30vh→28vh），底边从 34vh 提到 29vh，
+     消息整体再上移约 5% 屏高，更加"贴着中上"、远离画面中部的角色；
+     高度 28vh 配合 feed.js 的自适应条数，可完整容纳 5 条（原 30vh 下第 6 条会被容器顶边裁掉）；
+     宽度收到 48vw，右边不再压到右上角 Boss 面板（Boss 区限宽 25vw，左边界约 74vw）；
+     z-index 提到 99：高于右上角悬浮条(#joinBar 99 / DOM 顺序更靠后)与大厅条(98)，
+     消息不会被顶部控件盖住；仍低于弹窗(.bp-overlay 100)与竖屏引导(120)。 */
+  position: fixed; left: 50%; top: 1vh; height: 28vh; width: min(520px, 48vw);
+  transform: translateX(-50%); z-index: 99; pointer-events: none; overflow: hidden;
+  font-family: sans-serif;
+}
+#fxFeed .fx-item {
+  position: absolute; left: 50%; bottom: 6px; max-width: 100%;
+  transform: translate(-50%, 0);
+  padding: 6px 14px; border-radius: 11px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  background: rgba(10, 14, 26, .93); border: 1px solid rgba(140, 170, 255, .34);
+  border-left: 5px solid var(--c, #8be9ff);
+  color: var(--c, #8be9ff);           /* 文字随 buff 取色：不同提示不同颜色 */
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
+  animation: fxIn .3s ease;
+  opacity: 1;
+  transition: transform var(--ease, .4s) cubic-bezier(.22, .9, .3, 1), opacity .55s ease;
+}
+#fxFeed .fx-item.out { opacity: 0; }   /* 到期渐隐 */
+
+@keyframes fxIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Boss 血条下方的 buff 区：隔开与血条的距离，新 buff 出现时略微亮起正在生效的感觉 */
+.hb-buffs { margin-top: 2px; }
+/* 需求2/5：Boss 血条下方 buff 可点击弹说明；宽度按屏幕自适应，超宽自动换行（向下加行） */
+.hb-buffs .bb { box-shadow: 0 0 8px rgba(255, 140, 170, .28);
+  pointer-events: auto; cursor: pointer; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; }
+.hb-buffs .bb:active { transform: scale(.96); }
+
+@media (pointer: coarse) {
+  /* 本轮改动：移动端提示区略下移（8vh→10vh）避开顶部悬浮条与浏览器工具栏，
+     高度提到 30vh 保证同屏 4 条不被容器顶边裁掉；宽度收到 46vw（右边界 73vw），
+     与右上角 Boss 面板（25vw、右贴边，左边界约 74vw）留出间隙，不再横向压叠 */
+  #fxFeed { top: 10vh; height: 30vh; width: min(480px, 46vw); }
+  #fxFeed .fx-item { padding: 4px 9px; border-radius: 8px; }
+}

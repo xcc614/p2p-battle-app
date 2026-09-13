@@ -1,0 +1,11 @@
+{
+  "hp": 100,
+  "speed": 220,
+  "radius": 16,
+  "damageMul": 1,
+  "critChance": 0,
+  "critMul": 1.5,
+  "bulletLimit": 100,
+  "armor": 0,
+  "team": "players"
+}

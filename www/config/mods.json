@@ -1,0 +1,202 @@
+{
+  "_doc": "共享条目库（modules.json 里 gem / rune / addon 三个模块的 source）。group 为分组标签，采用「模块_分类」命名空间，与 modules.json 对应模块的 groups[].id 对齐：宝石按色系 gem_red / gem_blue / gem_green / gem_yellow，铭文按用途 rune_attack / rune_agility / rune_ward，追加按职责 addon_offense / addon_defense / addon_utility。同一条目也可作为装备的 mods 子挂载（条目级 mods 字段），此时分组标签不参与槽位计算。",
+  "ruby": {
+    "name": "红宝石",
+    "group": "gem_red",
+    "add": {
+      "damageMul": 0.05,
+      "critChance": 0.02
+    },
+    "unlockSkills": []
+  },
+  "ruby_heart": {
+    "name": "红宝石之心",
+    "group": "gem_red",
+    "add": {
+      "critMul": 0.2
+    },
+    "unlockSkills": []
+  },
+  "ruby_fury": {
+    "name": "赤炎宝石",
+    "group": "gem_red",
+    "add": {
+      "critChance": 0.04,
+      "damageMul": 0.03
+    },
+    "unlockSkills": []
+  },
+  "sapphire": {
+    "name": "蓝宝石",
+    "group": "gem_blue",
+    "add": {
+      "bulletLimit": 15
+    },
+    "unlockSkills": []
+  },
+  "sapphire_deep": {
+    "name": "深海宝石",
+    "group": "gem_blue",
+    "add": {
+      "bulletLimit": 25
+    },
+    "unlockSkills": []
+  },
+  "sapphire_ward": {
+    "name": "蓝晶护壁",
+    "group": "gem_blue",
+    "add": {
+      "armor": 2,
+      "bulletLimit": 10
+    },
+    "unlockSkills": []
+  },
+  "emerald": {
+    "name": "翡翠",
+    "group": "gem_green",
+    "add": {
+      "hp": 150
+    },
+    "unlockSkills": []
+  },
+  "emerald_vigor": {
+    "name": "生机翡翠",
+    "group": "gem_green",
+    "add": {
+      "hp": 120,
+      "speed": 10
+    },
+    "unlockSkills": []
+  },
+  "topaz": {
+    "name": "黄玉",
+    "group": "gem_yellow",
+    "add": {
+      "speed": 18
+    },
+    "unlockSkills": []
+  },
+  "topaz_spark": {
+    "name": "电光黄玉",
+    "group": "gem_yellow",
+    "add": {
+      "atkSpeedMul": 0.08
+    },
+    "unlockSkills": []
+  },
+  "rune_power": {
+    "name": "力量铭文",
+    "group": "rune_attack",
+    "add": {
+      "damageMul": 0.08
+    },
+    "unlockSkills": []
+  },
+  "rune_sharp": {
+    "name": "锋锐铭文",
+    "group": "rune_attack",
+    "add": {
+      "critChance": 0.03
+    },
+    "unlockSkills": []
+  },
+  "rune_crit": {
+    "name": "暴烈铭文",
+    "group": "rune_attack",
+    "add": {
+      "critMul": 0.25
+    },
+    "unlockSkills": []
+  },
+  "rune_swift": {
+    "name": "迅捷铭文",
+    "group": "rune_agility",
+    "add": {
+      "speed": 30
+    },
+    "unlockSkills": []
+  },
+  "rune_storm": {
+    "name": "疾风铭文",
+    "group": "rune_agility",
+    "add": {
+      "speed": 45,
+      "atkSpeedMul": 0.06
+    },
+    "unlockSkills": []
+  },
+  "rune_stone": {
+    "name": "磐石铭文",
+    "group": "rune_ward",
+    "add": {
+      "armor": 5
+    },
+    "unlockSkills": []
+  },
+  "rune_vital": {
+    "name": "生命铭文",
+    "group": "rune_ward",
+    "add": {
+      "hp": 260
+    },
+    "unlockSkills": []
+  },
+  "addon_sharp": {
+    "name": "锐利追加",
+    "group": "addon_offense",
+    "add": {
+      "critChance": 0.03
+    },
+    "unlockSkills": []
+  },
+  "addon_pierce": {
+    "name": "破甲追加",
+    "group": "addon_offense",
+    "add": {
+      "damageMul": 0.1
+    },
+    "unlockSkills": []
+  },
+  "addon_thorn": {
+    "name": "荆棘追加",
+    "group": "addon_defense",
+    "add": {
+      "armor": 3
+    },
+    "unlockSkills": []
+  },
+  "addon_plating": {
+    "name": "装甲追加",
+    "group": "addon_defense",
+    "add": {
+      "armor": 4,
+      "hp": 80
+    },
+    "unlockSkills": []
+  },
+  "addon_vigor": {
+    "name": "强健追加",
+    "group": "addon_defense",
+    "add": {
+      "hp": 180
+    },
+    "unlockSkills": []
+  },
+  "addon_quick": {
+    "name": "速射追加",
+    "group": "addon_utility",
+    "add": {
+      "atkSpeedMul": 0.12
+    },
+    "unlockSkills": []
+  },
+  "addon_focus": {
+    "name": "专注追加",
+    "group": "addon_utility",
+    "add": {
+      "bulletLimit": 15,
+      "critChance": 0.01
+    },
+    "unlockSkills": []
+  }
+}

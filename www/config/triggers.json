@@ -1,0 +1,219 @@
+{
+  "demon_lord_phase2": {
+    "when": "hpBelow",
+    "value": 0.66,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "boss_ring"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "boss_guard"
+        }
+      ],
+      "emit": "boss_phase_2",
+      "text": "Boss 进入第二阶段 · 弹幕展开!"
+    },
+    "units": [
+      "demon_lord"
+    ]
+  },
+  "demon_lord_phase3": {
+    "when": "hpBelow",
+    "value": 0.33,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "boss_ray",
+        "boss_ring_heavy",
+        "boss_nova"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "boss_rage"
+        }
+      ],
+      "emit": "boss_phase_3",
+      "text": "Boss 狂暴 · 激光/星环解锁!"
+    },
+    "units": [
+      "demon_lord"
+    ]
+  },
+  "demon_lord_time_1": {
+    "when": "afterTime",
+    "value": 30,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "boss_flame_storm"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "fury"
+        }
+      ],
+      "emit": "boss_rage",
+      "text": "30 秒到：Boss 烈焰风暴降临!"
+    },
+    "units": [
+      "demon_lord"
+    ]
+  },
+  "demon_lord_time_2": {
+    "when": "afterTime",
+    "value": 60,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "boss_ray_volley"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "enrage"
+        }
+      ],
+      "emit": "boss_rage",
+      "text": "60 秒到：Boss 压轴 · 激光齐射开启!"
+    },
+    "units": [
+      "demon_lord"
+    ]
+  },
+  "frost_queen_phase2": {
+    "when": "hpBelow",
+    "value": 0.66,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "queen_frost_nova"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "ice_shield"
+        }
+      ],
+      "emit": "boss_phase_2",
+      "text": "冰霜女王 · 霜之新星解锁，护体冰晶浮现!"
+    },
+    "units": [
+      "frost_queen"
+    ]
+  },
+  "frost_queen_phase3": {
+    "when": "hpBelow",
+    "value": 0.33,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "queen_comet",
+        "queen_maelstrom"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "boss_haste"
+        }
+      ],
+      "emit": "boss_phase_3",
+      "text": "冰霜女王狂暴 · 彗星/冰涡降临!"
+    },
+    "units": [
+      "frost_queen"
+    ]
+  },
+  "frost_queen_time_1": {
+    "when": "afterTime",
+    "value": 40,
+    "once": true,
+    "then": {
+      "selfBuffs": [
+        {
+          "buff": "ice_shield"
+        }
+      ],
+      "emit": "boss_rage",
+      "text": "40 秒：冰霜女王重铸冰晶护盾!"
+    },
+    "units": [
+      "frost_queen"
+    ]
+  },
+  "frost_queen_time_2": {
+    "when": "afterTime",
+    "value": 75,
+    "once": true,
+    "then": {
+      "allOpponentBuffs": [
+        {
+          "buff": "frost_slow"
+        }
+      ],
+      "emit": "boss_rage",
+      "text": "75 秒：极寒领域开启，勇者全员冰霜减速!"
+    },
+    "units": [
+      "frost_queen"
+    ]
+  },
+  "stone_golem_phase2": {
+    "when": "hpBelow",
+    "value": 0.66,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "golem_slam"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "boss_guard"
+        }
+      ],
+      "emit": "boss_phase_2",
+      "text": "岩石傀儡 · 岩甲加身，冲撞强化!"
+    },
+    "units": [
+      "stone_golem"
+    ]
+  },
+  "stone_golem_time_1": {
+    "when": "afterTime",
+    "value": 30,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "golem_boulder"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "shield"
+        }
+      ],
+      "emit": "golem_rage",
+      "text": "golem shield"
+    },
+    "units": [
+      "stone_golem"
+    ]
+  },
+  "abyss_warden_phase2": {
+    "when": "hpBelow",
+    "value": 0.5,
+    "once": true,
+    "then": {
+      "unlockSkills": [
+        "abyss_eye"
+      ],
+      "selfBuffs": [
+        {
+          "buff": "boss_invuln"
+        }
+      ],
+      "emit": "boss_phase_2",
+      "text": "深渊之眼睁开 · 短暂无敌!"
+    },
+    "units": [
+      "abyss_warden"
+    ]
+  }
+}

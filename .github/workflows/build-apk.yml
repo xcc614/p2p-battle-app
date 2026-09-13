@@ -1,0 +1,203 @@
+name: build-apk
+
+# ============================================================================
+# P2P 弹幕对战 —— 安卓 APK 云构建（GitHub Actions）
+# ----------------------------------------------------------------------------
+# 全部依赖 GitHub 免费预装环境与官方免费 Actions，不需要任何付费服务、
+# 私有凭据或额外申请：
+#   · ubuntu-latest 预装：Node / JDK 17 / Android SDK / pwsh(PowerShell Core)
+#   · actions/checkout、actions/setup-node、actions/upload-artifact（官方免费）
+#
+# 流程：
+#   checkout → 前置检查 → 固定预装 JDK17/Android SDK → 安装 Node →
+#   build/ 目录 npm ci → npm run cap:add (npx cap add android) → cap sync →
+#   build/inject.ps1 注入原生代码（Linux 下用 pwsh 调用）→
+#   android 目录 ./gradlew assembleDebug → 上传 app-debug.apk
+#
+# 产物：Artifact「p2p-battle-app-debug-apk」= app-debug.apk，
+#       在该次 Run 页面底部 Artifacts 区域下载（可直接装到手机侧载测试）。
+# 触发：push（任意分支）+ 手动触发（Actions → build-apk → Run workflow）。
+# ============================================================================
+
+on:
+  push:
+  workflow_dispatch:
+
+# 同一分支的旧构建被新构建取代时自动取消，避免排队
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: assembleDebug (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      # ---------------------------------------------------------------- 拉取代码
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- 前置检查
+      - name: 前置检查（www / android-overlay / build 配置）
+        run: |
+          set -euo pipefail
+          missing=0
+          for p in \
+            www/index.html \
+            www/landing/index.html \
+            android-overlay/SignalServer.java \
+            android-overlay/LanAddress.java \
+            android-overlay/ServerService.java \
+            android-overlay/MainActivity.java \
+            android-overlay/manifest-fragment.xml \
+            build/package.json \
+            build/capacitor.config.json \
+            build/inject.ps1 ; do
+            if [ ! -e "$p" ]; then echo "::error::仓库缺少必要文件: $p"; missing=1; fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          echo "前置检查通过（www / overlay / build 资产齐全）"
+
+      # ---------------------------------------------------------------- JDK / SDK
+      - name: 固定预装 JDK 17 与 Android SDK
+        run: |
+          set -euo pipefail
+
+          # Capacitor 6 / AGP 8.2 要求 JDK 17；运行器默认 java 可能已升到更高版本，
+          # 这里显式把 JAVA_HOME 指向运行器预装的 JDK 17，不做任何额外下载。
+          JDK="${JAVA_HOME_17_X64:-}"
+          if [ ! -x "$JDK/bin/javac" ]; then
+            for c in /usr/lib/jvm/temurin-17-jdk-amd64 /usr/lib/jvm/java-17-openjdk-amd64; do
+              if [ -x "$c/bin/javac" ]; then JDK="$c"; break; fi
+            done
+          fi
+          if [ ! -x "$JDK/bin/javac" ]; then
+            echo "::error::运行器上未找到预装 JDK 17（JAVA_HOME_17_X64=$JAVA_HOME_17_X64）"
+            exit 1
+          fi
+          echo "JAVA_HOME=$JDK" >> "$GITHUB_ENV"
+          echo "$JDK/bin" >> "$GITHUB_PATH"
+          "$JDK/bin/java" -version
+
+          # Android SDK：直接用运行器预装的，并通过 local.properties 显式告知 Gradle
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
+            echo "::error::未检测到预装 Android SDK（ANDROID_SDK_ROOT / ANDROID_HOME 均为空）"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "Android SDK = $SDK"
+          ls "$SDK/platforms" 2>/dev/null || true
+
+          # Capacitor 6 使用 compileSdk 34；预装镜像通常已有，缺失时补装（失败则交给 AGP 自动下载）
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            echo "::warning::预装 SDK 缺 android-34，尝试用 sdkmanager 补装"
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" \
+              || echo "::warning::sdkmanager 补装失败，交给 AGP 自动下载（android.builder.sdkDownload 默认开启）"
+          fi
+
+      # ---------------------------------------------------------------- Node
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # 说明：build/package-lock.json 尚未提交前不能开启 actions/setup-node 的缓存
+          #      （缓存键指向不存在的文件会直接报错）。把锁文件提交进仓库后可加：
+          #      cache: 'npm' / cache-dependency-path: build/package-lock.json
+
+      # ---------------------------------------------------------------- 依赖安装
+      - name: 安装依赖（build/ 目录，npm ci）
+        working-directory: build
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            # 首次运行：仓库里还没有锁文件，先生成再走 npm ci 的确定性安装
+            echo "::warning::缺少 build/package-lock.json，先用 npm install --package-lock-only 生成锁文件，再执行 npm ci"
+            npm install --package-lock-only --no-audit --no-fund
+            npm ci --no-audit --no-fund
+          fi
+          echo "cap cli: $(npx --no-install cap --version)"
+
+      # ---------------------------------------------------------------- 生成安卓工程
+      - name: 生成安卓工程（npx cap add android）
+        working-directory: build
+        run: |
+          set -euo pipefail
+          export CI=true
+          if [ -d android ]; then
+            echo "::warning::仓库中已存在 build/android，跳过 cap add，改为 cap sync"
+          else
+            npm run cap:add
+          fi
+          # cap sync = 把 capacitor.config.json 的 webDir(../www) 拷进 android/app/src/main/assets/public
+          npm run cap:sync
+          ls -d android/app/src/main/assets/public
+
+      # ---------------------------------------------------------------- 注入原生代码
+      - name: 注入原生代码（build/inject.ps1，用 pwsh 调用）
+        working-directory: build
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -File ./inject.ps1
+
+          echo "--- 注入结果自检 ---"
+          MAN=android/app/src/main/AndroidManifest.xml
+          echo "uses-permission 条数: $(grep -c '<uses-permission' "$MAN")"
+          grep -q 'android:name="\.signal\.ServerService"' "$MAN" || { echo "::error::Manifest 缺少 ServerService 节点"; exit 1; }
+          grep -q 'android:networkSecurityConfig="@xml/network_security_config"' "$MAN" || { echo "::error::Manifest 缺少 networkSecurityConfig"; exit 1; }
+          test -d android/app/src/main/assets/www || { echo "::error::静态资源根目录 assets/www 不存在"; exit 1; }
+          test -f android/app/src/main/res/xml/network_security_config.xml || { echo "::error::缺少 network_security_config.xml"; exit 1; }
+          echo "注入自检通过"
+
+      # ---------------------------------------------------------------- 编译
+      - name: 编译 Debug APK（./gradlew assembleDebug）
+        working-directory: build/android
+        run: |
+          set -euo pipefail
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          ls -lh app/build/outputs/apk/debug/
+
+      # ---------------------------------------------------------------- 收集信息
+      - name: 校验并记录 APK 信息
+        id: apk
+        run: |
+          set -euo pipefail
+          APK="build/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK" ]; then echo "::error::未生成 APK: $APK"; exit 1; fi
+          SIZE=$(stat -c%s "$APK")
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK"
+          {
+            echo "## P2P 弹幕对战 · Debug APK"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 文件 | app-debug.apk |"
+            echo "| 大小 | $(numfmt --to=iec "$SIZE")（$SIZE 字节） |"
+            echo "| SHA256 | \`$SHA\` |"
+            echo "| ABI | arm64-v8a（单 ABI 瘦身） |"
+            echo ""
+            echo "> 下载：本页底部 **Artifacts → p2p-battle-app-debug-apk**。安装后在 APP 首页查看局域网地址二维码，其他手机扫码即可游玩。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------- 上传产物
+      - name: 上传 APK 产物（app-debug.apk）
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-battle-app-debug-apk
+          path: build/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

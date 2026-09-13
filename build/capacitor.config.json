@@ -1,0 +1,22 @@
+{
+  "appId": "com.marvis.p2pbattle",
+  "appName": "P2P弹幕对战",
+  "webDir": "../www",
+  "server": {
+    "cleartext": true,
+    "androidScheme": "https",
+    "allowNavigation": [
+      "127.0.0.1",
+      "localhost",
+      "::1",
+      "192.168.*",
+      "10.*",
+      "172.*"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": true,
+    "backgroundColor": "#101418"
+  }
+}

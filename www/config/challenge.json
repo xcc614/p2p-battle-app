@@ -1,0 +1,7 @@
+{
+  "_doc": "单机默认对局：默认选角（index.html 下拉初值由此驱动）、默认 AI 难度档位 aiLevel、单人「你当 Boss」时 AI 勇者队人数 soloTeamAi。玩家侧 selectable 非 Boss 模板与 Boss 侧 isBoss 模板都会自动进下拉；改选角只影响默认选中项，不影响可选范围。AI 难度档位总数由 config/ai.json 数组长度决定；AI 数量档位上限默认按 runtime.json 的 ROOM_MAX 扣除必要席位（真人位 / Boss 位）推算，如需显式封顶可另加 maxAiFighters（房间 AI 勇者）/ maxAiAllies（房间 AI 队友）/ maxSoloFighters（单人 AI 勇者队）/ maxSoloAllies（单人 AI 队友）字段。",
+  "player": "hero",
+  "boss": "demon_lord",
+  "aiLevel": 2,
+  "soloTeamAi": 3
+}

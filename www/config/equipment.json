@@ -1,0 +1,188 @@
+{
+  "_doc": "装备条目库（modules.json 里 equipment 模块的 source）。每个条目 = 一件可选装备：group/slot 为部位分组标签（需与 modules.json 模块 groups[].id 对齐），add 为属性加成（叠加进 Combat.calcStats），unlockSkills 为额外解锁技能（进入技能候选池）。新增装备只要追加条目即可，无需改代码；分组上限与可选范围全部由 modules.json 的 groups 声明。",
+  "iron_sword": {
+    "name": "铁剑",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.15
+    },
+    "unlockSkills": []
+  },
+  "wooden_bow": {
+    "name": "木弓",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.1,
+      "bulletLimit": 20
+    },
+    "unlockSkills": [
+      "triple_shot"
+    ]
+  },
+  "steel_blade": {
+    "name": "钢刃",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.28,
+      "armor": 2
+    },
+    "unlockSkills": []
+  },
+  "twin_daggers": {
+    "name": "双匕首",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.12,
+      "atkSpeedMul": 0.15
+    },
+    "unlockSkills": []
+  },
+  "arcane_staff": {
+    "name": "秘法法杖",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.2,
+      "bulletLimit": 30
+    },
+    "unlockSkills": [
+      "flame_ring"
+    ]
+  },
+  "heavy_axe": {
+    "name": "巨斧",
+    "group": "weapon",
+    "slot": "weapon",
+    "image": "",
+    "add": {
+      "damageMul": 0.4,
+      "speed": -25,
+      "critChance": 0.02
+    },
+    "unlockSkills": []
+  },
+  "leather_helm": {
+    "name": "皮质头盔",
+    "group": "helmet",
+    "slot": "helmet",
+    "image": "",
+    "add": {
+      "hp": 120,
+      "speed": 8
+    },
+    "unlockSkills": []
+  },
+  "iron_helm": {
+    "name": "铁质头盔",
+    "group": "helmet",
+    "slot": "helmet",
+    "image": "",
+    "add": {
+      "hp": 200,
+      "armor": 3
+    },
+    "unlockSkills": []
+  },
+  "mage_hood": {
+    "name": "法师兜帽",
+    "group": "helmet",
+    "slot": "helmet",
+    "image": "",
+    "add": {
+      "bulletLimit": 25,
+      "critChance": 0.03
+    },
+    "unlockSkills": []
+  },
+  "leather_armor": {
+    "name": "皮质护甲",
+    "group": "armor",
+    "slot": "armor",
+    "image": "",
+    "add": {
+      "hp": 200,
+      "armor": 2
+    },
+    "unlockSkills": []
+  },
+  "plate_armor": {
+    "name": "重型板甲",
+    "group": "armor",
+    "slot": "armor",
+    "image": "",
+    "add": {
+      "hp": 500,
+      "armor": 8,
+      "speed": -30
+    },
+    "unlockSkills": []
+  },
+  "arcane_robe": {
+    "name": "秘法长袍",
+    "group": "armor",
+    "slot": "armor",
+    "image": "",
+    "add": {
+      "hp": 120,
+      "bulletLimit": 40,
+      "critChance": 0.04
+    },
+    "unlockSkills": [
+      "holy_nova"
+    ]
+  },
+  "ruby_ring": {
+    "name": "红玉戒指",
+    "group": "accessory",
+    "slot": "accessory",
+    "image": "",
+    "add": {
+      "critChance": 0.05
+    },
+    "unlockSkills": []
+  },
+  "swift_boots": {
+    "name": "疾风之靴",
+    "group": "accessory",
+    "slot": "accessory",
+    "image": "",
+    "add": {
+      "speed": 35,
+      "atkSpeedMul": 0.1
+    },
+    "unlockSkills": []
+  },
+  "guard_amulet": {
+    "name": "守护护符",
+    "group": "accessory",
+    "slot": "accessory",
+    "image": "",
+    "add": {
+      "armor": 4,
+      "hp": 100
+    },
+    "unlockSkills": []
+  },
+  "frost_pendant": {
+    "name": "霜寒吊坠",
+    "group": "accessory",
+    "slot": "accessory",
+    "image": "",
+    "add": {
+      "bulletLimit": 20,
+      "critMul": 0.15
+    },
+    "unlockSkills": [
+      "ice_lance_shot"
+    ]
+  }
+}

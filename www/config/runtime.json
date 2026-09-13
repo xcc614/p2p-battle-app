@@ -1,0 +1,35 @@
+{
+  "ROOM_MAX": 8,
+ "INVITE_CANDS_MAX": 8,
+  "TICK_RATE": 20,
+  "POSITION_RATE": 15,
+  "INTERP_SMOOTH": 0.15,
+  "MAX_BULLETS_PER_PLAYER": 100,
+  "ARENA": {
+    "w": 1600,
+    "h": 1000
+  },
+  "RENDER": {
+    "mode": "webgl",
+    "antialias": true,
+    "resolution": 1,
+    "background": 16054011
+  },
+  "SIGNAL_BASE": "http://127.0.0.1:8080",
+  "SIGNAL_MODE": "ws",
+  "ICE_SERVERS": [
+    {
+      "urls": "stun:stun.cloudflare.com:3478"
+    },
+    {
+      "urls": "stun:stun.l.google.com:19302"
+    }
+  ],
+  "MATCH_DURATION": 120,
+  "RESPAWN_DELAY": 3,
+  "BOSS_WIN_ON_KILLS": 4,
+  "BUFF_DROP_START": 2,
+  "BUFF_DROP_INTERVAL": 4,
+  "BUFF_DROP_MAX_ON_FIELD": 6,
+  "BUFF_DROP_BATCH": 2
+}

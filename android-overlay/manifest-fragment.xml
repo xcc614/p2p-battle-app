@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  p2p-battle-app / android-overlay / manifest-fragment.xml
+
+  ★ 这不是一个可独立编译的 AndroidManifest，而是"注入片段"，由构建脚本把其中节点合并进
+    Capacitor 生成的 android/app/src/main/AndroidManifest.xml（注入规则见 README.md）。
+  ★ 占位符：__APP_ID__（Capacitor appId，如 com.marvis.p2pbattle）、__APP_PKG__（Java 包名，通常与 __APP_ID__ 相同）
+
+  注入要点（4 处）：
+    1) <uses-permission> 共 7 条 → 加在 <manifest> 下、<application> 之前
+    2) android:usesCleartextTraffic / android:networkSecurityConfig / android:hardwareAccelerated
+       → 合并进 <application> 属性（局域网是纯 HTTP/WS，Android 9+ 默认禁明文，必须放行）
+    3) <service android:name=".signal.ServerService" ...> 整段 → 加在 <application> 内
+    4) MainActivity：沿用 Capacitor 模板原声明（launcher intent-filter 不动），Java 实现由本 overlay
+       的 MainActivity.java 覆盖。⚠ 下方的 <activity> 节点**已整体注释**，构建脚本不要注入它，
+       否则会与模板里的同名声明冲突（aapt2 合并报错）。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 内置信令服务需要监听局域网 8080 端口并做 HTTP / WebSocket 通信 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 枚举网卡、判断网络状态（LanAddress 取热点/局域网 IPv4） -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- 前台服务常驻：基础权限 + 两种 foregroundServiceType 各自对应的权限（Android 14+ 强制） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Android 13+ 通知栏可见性（信令服务常驻通知） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:hardwareAccelerated="true">
+
+        <!--
+          信令服务：前台 Service，负责启动并保活内置 HTTP/WS 服务，常驻通知显示局域网访问地址。
+
+          foregroundServiceType 同时声明两种类型，与 ServerService.java 的运行时取值严格对应：
+            · API 29-33：代码走 FOREGROUND_SERVICE_TYPE_DATA_SYNC（子集无需额外属性）
+            · API 34+  ：代码走 FOREGROUND_SERVICE_TYPE_SPECIAL_USE（必须配 PROPERTY_SPECIAL_USE_FGS_SUBTYPE，
+                         且 Google Play 上架需在控制台说明用途；本项目为本地侧载，仅需属性自证）
+          声明与运行时不一致时 startForeground 会抛 SecurityException（被代码 try/catch 降级为普通后台服务）。
+
+          android:exported="false"：仅本应用启动/绑定，无需对外暴露。
+          android:stopWithTask="false"：用户划掉任务栈后服务仍在（配合 START_STICKY 保活）。
+        -->
+        <service
+            android:name=".signal.ServerService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local LAN signaling and static web server for peer-to-peer game sessions" />
+        </service>
+
+        <!--
+          ↓↓↓ 请勿注入：MainActivity 沿用 Capacitor 模板声明（构造脚本只覆盖其 Java 实现）↓↓↓
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|density"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:windowSoftInputMode="adjustResize" />
+        -->
+    </application>
+</manifest>
+
+<!--
+  另需在 android/app/src/main/res/xml/network_security_config.xml 放置（脚本会一并生成）：
+
+  <?xml version="1.0" encoding="utf-8"?>
+  <network-security-config>
+      <base-config cleartextTrafficPermitted="true">
+          <trust-anchors>
+              <certificates src="system" />
+          </trust-anchors>
+      </base-config>
+  </network-security-config>
+-->

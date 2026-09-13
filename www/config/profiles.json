@@ -1,0 +1,171 @@
+{
+  "_defaultUnitId": "hero",
+  "_doc": "玩家档案（设计文档第八章/第十一章）：一条档案 = 一个玩家模板，记录 ① 单位模板底座 unitId；② 基础属性覆写 base（叠加在 units.json 的 base 之上）；③ 挂载模块 modules[{ moduleId, entries:[条目] }]。条目的 id 引用 config/modules.json 里该模块 source 指定的库（装备/铭文/宝石/技能/自定义）；条目上还可写条目级覆写——add 追加属性、condition 生效条件、unlockSkills 追加解锁、mods 子挂载，即『条目含基础属性与特殊效果判定』。模块槽位上限与解析规则见 config/modules.json（maxSlots）。开局由房主汇总全部玩家档案，校验（超上限截断、未知模块/条目剔除）后随房间同步下发，各端按自身档案重建。",
+  "hero_guard": {
+    "name": "勇者·重装型",
+    "unitId": "hero",
+    "base": {
+      "hp": 2000,
+      "speed": 205,
+      "radius": 15,
+      "damageMul": 0.7
+    },
+    "modules": [
+      {
+        "moduleId": "equipment",
+        "entries": [
+          {
+            "id": "iron_sword",
+            "mods": {
+              "m1": "ruby",
+              "m2": "rune_power"
+            }
+          }
+        ]
+      },
+      {
+        "moduleId": "gem",
+        "entries": [
+          {
+            "id": "ruby"
+          },
+          {
+            "id": "sapphire",
+            "condition": {
+              "type": "hpBelow",
+              "value": 0.5
+            }
+          }
+        ]
+      },
+      {
+        "moduleId": "rune",
+        "entries": [
+          {
+            "id": "rune_power"
+          }
+        ]
+      },
+      {
+        "moduleId": "addon",
+        "entries": [
+          {
+            "id": "addon_thorn"
+          }
+        ]
+      },
+      {
+        "moduleId": "relic",
+        "entries": [
+          {
+            "id": "relic_blood"
+          }
+        ]
+      },
+      {
+        "moduleId": "skill",
+        "entries": [
+          {
+            "id": "laser"
+          }
+        ]
+      }
+    ],
+    "notes": "示例档案：装备 1/8 · 宝石 2/6 · 铭文 1/4 · 追加 1/4 · 遗物 1/3 · 技能 1/8"
+  },
+  "ranger_scout": {
+    "name": "游侠·斥候",
+    "unitId": "ranger",
+    "base": {
+      "hp": 1500,
+      "speed": 260,
+      "radius": 13,
+      "damageMul": 0.7
+    },
+    "modules": [
+      {
+        "moduleId": "equipment",
+        "entries": [
+          {
+            "id": "wooden_bow",
+            "mods": {
+              "m1": "sapphire",
+              "m2": "rune_swift"
+            }
+          }
+        ]
+      },
+      {
+        "moduleId": "gem",
+        "entries": [
+          {
+            "id": "ruby"
+          },
+          {
+            "id": "ruby"
+          },
+          {
+            "id": "sapphire"
+          }
+        ]
+      },
+      {
+        "moduleId": "skill",
+        "entries": [
+          {
+            "id": "plasma"
+          },
+          {
+            "id": "nova",
+            "condition": {
+              "type": "timeAfter",
+              "value": 20
+            }
+          }
+        ]
+      }
+    ],
+    "notes": "示例档案：宝石允许重复（allowDuplicate=true），可叠 2 颗红宝石"
+  },
+  "hero_sniper": {
+    "name": "勇者·速射型",
+    "unitId": "hero",
+    "base": {
+      "hp": 1600,
+      "speed": 235,
+      "radius": 13,
+      "damageMul": 0.8
+    },
+    "modules": [
+      {
+        "moduleId": "equipment",
+        "entries": [
+          {
+            "id": "wooden_bow",
+            "mods": {
+              "m1": "rune_power",
+              "m2": "addon_sharp"
+            }
+          }
+        ]
+      },
+      {
+        "moduleId": "addon",
+        "entries": [
+          {
+            "id": "addon_sharp"
+          }
+        ]
+      },
+      {
+        "moduleId": "relic",
+        "entries": [
+          {
+            "id": "relic_thorn"
+          }
+        ]
+      }
+    ],
+    "notes": "示例档案：条目级 unlockSkills 追加解锁（荆棘遗物解锁 nova）"
+  }
+}

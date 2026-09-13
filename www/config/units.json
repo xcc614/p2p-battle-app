@@ -1,0 +1,140 @@
+{
+  "_note": "damageMul 为『攻击系数』乘区：子弹伤害 = 弹型基础 damage（bullets.json）× 释放方式倍率 × 攻击者 damageMul（含单位 base + 装备/宝石/铭文/追加/档案模块条目），暴击由 critChance/critMul 结算（攻击者合成属性）。校准锚点：接线前该倍率恒为 1（damageMul 未被消费），故本次把各模板重标到「接线后等效伤害 ≈ 接线前」的区间——勇者默认装备（铁剑+红宝石+力量铭文）实测 0.98，各示例档案 0.90~1.10（含暴击期望 1.01~1.12），极端堆叠（全槽位/镶嵌伤害向拉满）上限约 1.9；Boss 侧 0.95~1.15（均值 1.04，用于对冲玩家侧新增的暴击期望）。",
+  "_aiNames": {
+    "_doc": "AI 显示名模板（联机房间 AI 补位 / 单人 AI 共用，改这里即改全库 AI 名）：bossSuffix = AI Boss 名后缀（名称 = 该 Boss 单位的 name + 此后缀）；fighterPrefix = 单人「你当 Boss」时 AI 勇者名前缀（名称 = 前缀 + 勇者单位 name + 序号）；roomFighterPrefix = 联机房间房主当 Boss 时 AI 勇者名前缀（名称 = 前缀 + 序号）；allyPrefix = AI 队友名前缀（名称 = 前缀 + 序号）；fighterLabel / allyLabel = 界面称谓（AI 数量下拉文案与标题）。字段缺失时用代码内置文案兜底，界面不变。",
+    "bossSuffix": "(Bot)",
+    "fighterPrefix": "AI",
+    "roomFighterPrefix": "AI勇者",
+    "allyPrefix": "队友",
+    "fighterLabel": "AI 勇者",
+    "allyLabel": "AI 队友"
+  },
+  "hero": {
+    "name": "勇者",
+    "base": {
+      "hp": 1600,
+      "speed": 215,
+      "radius": 14,
+      "damageMul": 0.7
+    },
+    "skills": [
+      "auto_attack",
+      "quick_shot",
+      "triple_shot",
+      "fireball",
+      "pierce_shot",
+      "shuriken_fan",
+      "nova",
+      "laser"
+    ],
+    "equipment": [
+      {
+        "id": "iron_sword",
+        "mods": {
+          "m1": "ruby",
+          "m2": "rune_power"
+        }
+      }
+    ],
+    "color": "#57c7ff",
+    "palette": [
+      "#57c7ff",
+      "#ffd166",
+      "#ff6b9d",
+      "#8be9fd"
+    ],
+    "isBoss": false,
+    "selectable": true,
+    "aiRole": "fighter"
+  },
+  "demon_lord": {
+    "name": "魔王",
+    "base": {
+      "hp": 1350,
+      "speed": 85,
+      "radius": 30,
+      "damageMul": 1.05,
+      "critChance": 0.03
+    },
+    "skills": [
+      "boss_spray",
+      "boss_fire",
+      "boss_laser_fan",
+      "boss_meteor"
+    ],
+    "equipment": [],
+    "color": "#ff2d55",
+    "isBoss": true,
+    "selectable": true,
+    "aiRole": "boss"
+  },
+  "frost_queen": {
+    "name": "冰霜女王",
+    "base": {
+      "hp": 1280,
+      "speed": 80,
+      "radius": 28,
+      "damageMul": 0.95,
+      "critChance": 0.05,
+      "critMul": 1.6
+    },
+    "skills": [
+      "queen_spray",
+      "queen_beam"
+    ],
+    "equipment": [],
+    "color": "#5cd6ff",
+    "palette": [
+      "#5cd6ff",
+      "#c3f3ff",
+      "#aeefff"
+    ],
+    "isBoss": true,
+    "selectable": true,
+    "aiRole": "boss"
+  },
+  "stone_golem": {
+    "name": "磐岩魔像",
+    "base": {
+      "hp": 1560,
+      "speed": 60,
+      "radius": 34,
+      "damageMul": 1.15
+    },
+    "skills": [
+      "golem_boulder"
+    ],
+    "equipment": [],
+    "color": "#a08c6a",
+    "palette": [
+      "#a08c6a",
+      "#c9b89a",
+      "#8a7450"
+    ],
+    "isBoss": true,
+    "selectable": true,
+    "aiRole": "boss"
+  },
+  "abyss_warden": {
+    "name": "深渊观察者",
+    "base": {
+      "hp": 1500,
+      "speed": 68,
+      "radius": 32,
+      "damageMul": 1.0
+    },
+    "skills": [
+      "abyss_tentacle"
+    ],
+    "equipment": [],
+    "color": "#7b5ea7",
+    "palette": [
+      "#7b5ea7",
+      "#9d7fd6",
+      "#5b4390"
+    ],
+    "isBoss": true,
+    "selectable": true,
+    "aiRole": "boss"
+  }
+}
