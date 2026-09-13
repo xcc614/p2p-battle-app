@@ -126,8 +126,11 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // 注意：Capacitor 6 的 BridgeActivity 把 onStart/onStop/onDestroy 声明为 public，
+    // 子类覆盖时权限只能放宽不能收紧，必须同样用 public，否则 javac 报
+    // "attempting to assign weaker access privileges; was public"。
     @Override
-    protected void onStart() {
+    public void onStart() {
         super.onStart();
         // 先启动前台服务（常驻），再绑定查询状态
         ServerService.start(this, SignalServer.DEFAULT_PORT);
@@ -140,7 +143,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         super.onStop();
         handler.removeCallbacks(pollTask);
         handler.removeCallbacks(loadTimeoutTask);
@@ -155,7 +158,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         handler.removeCallbacks(pollTask);
         handler.removeCallbacks(loadTimeoutTask);
         super.onDestroy();
