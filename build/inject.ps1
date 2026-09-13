@@ -146,11 +146,17 @@ $manifest = Read-TextUtf8 $manifestPath
 $fragment = Read-TextUtf8 ([System.IO.Path]::Combine($OverlayDir, 'manifest-fragment.xml'))
 $fragment = $fragment.Replace('__APP_PKG__', $AppId).Replace('__APP_ID__', $AppId)
 
+# 先剔除片段里的 XML 注释再提取节点：片段顶部的说明性注释中出现了 "<service ...>"、">/service<"
+# 一类字面量说明文字，若不剔除，提取 <service> 的正则会从注释里那段文字开始匹配，一路吞到真实的
+# </service>，把注释正文、片段的 <manifest> 开标签等一并塞进 <application>，生成非法 XML
+# （manifest-merger 报 "Error parsing ... AndroidManifest.xml"）。
+$fragmentXml = [regex]::Replace($fragment, '(?s)<!--.*?-->', '')
+
 $manifestNotes = @()
 
 # 4.1 权限
 $permNames = @()
-foreach ($pm in [regex]::Matches($fragment, '<uses-permission\s+android:name="([^"]+)"')) {
+foreach ($pm in [regex]::Matches($fragmentXml, '<uses-permission\s+android:name="([^"]+)"')) {
     $permNames += $pm.Groups[1].Value
 }
 if ($permNames.Count -eq 0) { throw "manifest-fragment.xml 中未解析到任何 <uses-permission>" }
@@ -191,7 +197,7 @@ if ($attrLines.Count -gt 0) {
 }
 
 # 4.3 ServerService 节点
-$svcMatch = [regex]::Match($fragment, '(?s)<service\b.*?</service>')
+$svcMatch = [regex]::Match($fragmentXml, '(?s)<service\b.*?</service>')
 if (-not $svcMatch.Success) { throw "manifest-fragment.xml 中未解析到 <service> 节点" }
 if ($manifest.IndexOf('.signal.ServerService') -ge 0) {
     $manifestNotes += "ServerService 节点已存在，跳过"
