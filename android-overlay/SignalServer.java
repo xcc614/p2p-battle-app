@@ -412,7 +412,7 @@ public class SignalServer extends NanoWSD {
             if (headers != null) {
                 for (Iterator<?> it = headers.keys(); it.hasNext();) {
                     String key = String.valueOf(it.next());
-                    String value = String.valueOf(headers.opt(key));
+                    String value = String.valueOf(headers.opt(String.valueOf(key)));
                     if (!isTokenHeaderName(key)
                             || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
                         throw new IllegalArgumentException("invalid header: " + key);
@@ -466,7 +466,7 @@ public class SignalServer extends NanoWSD {
         Iterator<?> keys = params.keys();
         while (keys.hasNext()) {
             String key = String.valueOf(keys.next());
-            Object value = params.opt(key);
+            Object value = params.opt(String.valueOf(key));
             sb.append(hasQuery ? '&' : '?');
             hasQuery = true;
             sb.append(URLEncoder.encode(key, "UTF-8"));
