@@ -11,7 +11,8 @@
  * 协议逐条对齐 C:\Workspace\Marvis\p2p-battle\server_local.py，差异只有一处：
  *   服务端不做人数上限校验（MAX_MEMBERS / room full 逻辑已按新版要求移除）。
  *
- * 依赖：仅 NanoHTTPD 2.3.1 + NanoWSD 2.3.1（org.nanohttpd），无其他第三方库，无 org.json。
+ * 依赖：仅 NanoHTTPD 2.3.1 + NanoWSD 2.3.1（org.nanohttpd），无其他第三方库。
+ *       /proxy 接口使用 Android 平台内置 org.json（非第三方依赖）。
  *
  * 注入说明：包名占位符 __APP_PKG__ 由构建脚本替换为 Capacitor appId（namespace），
  *          例如 appId=com.marvis.p2pbattle → package com.marvis.p2pbattle.signal;
@@ -28,7 +29,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -39,6 +43,9 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Pattern;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import fi.iki.elonen.NanoHTTPD;
 import fi.iki.elonen.NanoWSD;
@@ -59,6 +66,9 @@ public class SignalServer extends NanoWSD {
 
     /** 自定义房间码：1-16 位 [A-Za-z0-9_-]，占用返回 409 */
     private static final Pattern CUSTOM_TOKEN_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,16}$");
+
+    /** /proxy 转发响应体上限，防内存放大 */
+    private static final int MAX_PROXY_BODY = 16 * 1024 * 1024;
 
     /** APK 内静态站点根目录（cap sync 产出：assets/www） */
     private static final String ASSETS_ROOT = "www";
@@ -255,9 +265,16 @@ public class SignalServer extends NanoWSD {
             uri = "/";
         }
 
+        if (Method.OPTIONS.equals(method)) {
+            return handlePreflight(session);
+        }
+
         if (Method.POST.equals(method) || Method.PUT.equals(method)) {
             if ("/create".equals(uri)) {
                 return handleCreate(session);
+            }
+            if ("/proxy".equals(uri)) {
+                return handleProxy(session);
             }
             return jsonResponse(Response.Status.NOT_FOUND, errorJson("not found"));
         }
@@ -267,6 +284,9 @@ public class SignalServer extends NanoWSD {
         }
 
         if ("/create".equals(uri)) {
+            return jsonResponse(Response.Status.METHOD_NOT_ALLOWED, errorJson("use POST"));
+        }
+        if ("/proxy".equals(uri)) {
             return jsonResponse(Response.Status.METHOD_NOT_ALLOWED, errorJson("use POST"));
         }
         if ("/api/info".equals(uri) || "/lan-info.json".equals(uri)) {
@@ -316,6 +336,176 @@ public class SignalServer extends NanoWSD {
         sb.append(",\"myId\":").append(q(myId));
         sb.append(",\"members\":[]}");
         return jsonResponse(Response.Status.OK, sb.toString());
+    }
+
+    /** OPTIONS 预检：放行跨域调用（/proxy、/create 等全部接口），回显请求头白名单 */
+    private Response handlePreflight(IHTTPSession session) {
+        Map<String, String> headers = session.getHeaders();
+        String reqHeaders = (headers == null) ? null : headers.get("access-control-request-headers");
+        Response response = NanoHTTPD.newFixedLengthResponse(Response.Status.NO_CONTENT, "text/plain", "");
+        response.addHeader("Access-Control-Allow-Origin", "*");
+        response.addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
+        if (!isBlank(reqHeaders)) {
+            response.addHeader("Access-Control-Allow-Headers", reqHeaders);
+        }
+        response.addHeader("Access-Control-Max-Age", "86400");
+        return response;
+    }
+
+    /** POST /proxy：服务端代转发，解决前端跨域。
+     *  body {url, method?, params?, headers?, timeout?}
+     *   - url      必填，http(s) 目标地址
+     *   - method   可选，默认 GET；GET/HEAD/DELETE 时 params 编码进 query，其余作为 JSON body 发送
+     *   - params   可选，目标参数对象
+     *   - headers  可选，附加请求头（键需为合法 HTTP token，值不允许换行）
+     *   - timeout  可选，毫秒，默认 10000，范围 1000-60000
+     *  响应透传目标服务器状态码 / Content-Type / 原始 body；参数错误 400，上游失败 502。
+     */
+    private Response handleProxy(IHTTPSession session) {
+        String body = readBody(session);
+        if (isBlank(body)) {
+            return jsonResponse(Response.Status.BAD_REQUEST, errorJson("body required"));
+        }
+        JSONObject req;
+        try {
+            req = new JSONObject(body);
+        } catch (JSONException je) {
+            return jsonResponse(Response.Status.BAD_REQUEST, errorJson("invalid json body"));
+        }
+        String target = trim(req.optString("url"));
+        if (isBlank(target)
+                || !(target.startsWith("http://") || target.startsWith("https://"))) {
+            return jsonResponse(Response.Status.BAD_REQUEST, errorJson("url must be http(s)"));
+        }
+        String method = trim(req.optString("method", "GET")).toUpperCase(Locale.US);
+        if (!"GET".equals(method) && !"HEAD".equals(method) && !"DELETE".equals(method)
+                && !"POST".equals(method) && !"PUT".equals(method) && !"PATCH".equals(method)) {
+            return jsonResponse(Response.Status.BAD_REQUEST, errorJson("unsupported method"));
+        }
+        int timeout = req.optInt("timeout", 10000);
+        if (timeout < 1000 || timeout > 60000) {
+            timeout = 10000;
+        }
+        JSONObject params = req.optJSONObject("params");
+        JSONObject headers = req.optJSONObject("headers");
+        try {
+            return doProxy(target, method, params, headers, timeout);
+        } catch (Throwable t) {
+            Log.w(TAG, "proxy upstream failed: " + t);
+            return jsonResponse(Response.Status.BAD_GATEWAY,
+                    errorJson("upstream error: " + t.getMessage()));
+        }
+    }
+
+    /** 执行转发并透传目标响应（状态码 / Content-Type / 原始字节） */
+    private static Response doProxy(String target, String method, JSONObject params,
+                                    JSONObject headers, int timeout) throws Exception {
+        String finalUrl = buildProxyUrl(target, method, params);
+        HttpURLConnection conn = (HttpURLConnection) new URL(finalUrl).openConnection();
+        try {
+            conn.setConnectTimeout(timeout);
+            conn.setReadTimeout(timeout);
+            conn.setRequestMethod(method);
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            conn.setRequestProperty("User-Agent", "p2p-proxy/1.0");
+            if (headers != null) {
+                for (Iterator<?> it = headers.keys(); it.hasNext();) {
+                    String key = String.valueOf(it.next());
+                    String value = String.valueOf(headers.opt(key));
+                    if (!isTokenHeaderName(key)
+                            || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
+                        throw new IllegalArgumentException("invalid header: " + key);
+                    }
+                    conn.setRequestProperty(key, value);
+                }
+            }
+            if (!"GET".equals(method) && !"HEAD".equals(method) && !"DELETE".equals(method)) {
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                byte[] payload = (params == null) ? new byte[0]
+                        : params.toString().getBytes("UTF-8");
+                java.io.OutputStream out = conn.getOutputStream();
+                try {
+                    out.write(payload);
+                } finally {
+                    out.close();
+                }
+            }
+            int status = conn.getResponseCode();
+            if (status == 101) {
+                throw new IOException("upstream returned 101, unsupported");
+            }
+            InputStream in = (status >= 400) ? conn.getErrorStream() : conn.getInputStream();
+            byte[] data = (in == null) ? new byte[0] : readProxyBody(in);
+            String contentType = conn.getContentType();
+            NanoHTTPD.Response.IStatus st = NanoHTTPD.Response.Status.lookup(status);
+            if (st == null) {
+                throw new IOException("unsupported upstream status " + status);
+            }
+            Response response = NanoHTTPD.newFixedLengthResponse(st,
+                    (contentType == null || contentType.length() == 0)
+                            ? "application/octet-stream" : contentType, data);
+            response.addHeader("Cache-Control", "no-store");
+            response.addHeader("Access-Control-Allow-Origin", "*");
+            return response;
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    /** GET/HEAD/DELETE 把 params 编码进 query，其余方法原样返回 target */
+    private static String buildProxyUrl(String target, String method, JSONObject params)
+            throws java.io.UnsupportedEncodingException {
+        if (params == null
+                || "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+            return target;
+        }
+        StringBuilder sb = new StringBuilder(target);
+        boolean hasQuery = target.indexOf('?') >= 0;
+        Iterator<?> keys = params.keys();
+        while (keys.hasNext()) {
+            String key = String.valueOf(keys.next());
+            Object value = params.opt(key);
+            sb.append(hasQuery ? '&' : '?');
+            hasQuery = true;
+            sb.append(URLEncoder.encode(key, "UTF-8"));
+            sb.append('=');
+            if (value != null) {
+                sb.append(URLEncoder.encode(String.valueOf(value), "UTF-8"));
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 读取转发响应体，上限 16MB 防内存放大 */
+    private static byte[] readProxyBody(InputStream in) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream(8192);
+        byte[] buf = new byte[8192];
+        int n;
+        int total = 0;
+        while ((n = in.read(buf)) > 0) {
+            total += n;
+            if (total > MAX_PROXY_BODY) {
+                throw new IOException("upstream body too large");
+            }
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
+    }
+
+    /** 合法 HTTP 头名（RFC 7230 token：字母数字 + !#$%&'*+-.^_`|~），仅防换行注入 */
+    private static boolean isTokenHeaderName(String s) {
+        if (s == null || s.length() == 0) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x21 || c > 0x7E || "()<>@,;:\\\"/[]?={} \t".indexOf(c) >= 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** GET /api/info：给 landing 页解析局域网基址用，字段与 server_local.py 对齐 */
