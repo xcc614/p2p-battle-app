@@ -78,6 +78,19 @@ public class SignalServer extends NanoWSD {
 
     private static final char[] HEX = "0123456789abcdef".toCharArray();
 
+    /** 502 Bad Gateway：NanoHTTPD 2.3.1 的 Response.Status 无 502 枚举，自定义保持代理语义准确 */
+    private static final NanoHTTPD.Response.IStatus STATUS_BAD_GATEWAY = new NanoHTTPD.Response.IStatus() {
+        @Override
+        public String getDescription() {
+            return "Bad Gateway";
+        }
+
+        @Override
+        public int getRequestStatus() {
+            return 502;
+        }
+    };
+
     private final AssetManager assets;
     private final Random random = new Random();
     private final int port;
@@ -392,7 +405,7 @@ public class SignalServer extends NanoWSD {
             return doProxy(target, method, params, headers, timeout);
         } catch (Throwable t) {
             Log.w(TAG, "proxy upstream failed: " + t);
-            return jsonResponse(Response.Status.BAD_GATEWAY,
+            return jsonResponse(STATUS_BAD_GATEWAY,
                     errorJson("upstream error: " + t.getMessage()));
         }
     }
@@ -445,7 +458,8 @@ public class SignalServer extends NanoWSD {
             }
             Response response = NanoHTTPD.newFixedLengthResponse(st,
                     (contentType == null || contentType.length() == 0)
-                            ? "application/octet-stream" : contentType, data);
+                            ? "application/octet-stream" : contentType,
+                    new ByteArrayInputStream(data), data.length);
             response.addHeader("Cache-Control", "no-store");
             response.addHeader("Access-Control-Allow-Origin", "*");
             return response;
